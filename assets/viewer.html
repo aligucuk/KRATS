@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <style>
+        /* Başlangıç Rengi: KIRMIZI (Dosya bulundu demek) */
+        body { margin: 0; padding: 0; background-color: red; overflow: hidden; transition: background-color 0.5s; }
+        
+        model-viewer { width: 100vw; height: 100vh; outline: none; }
+        
+        /* Debug Bilgi Kutusu */
+        #debug-box {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: white;
+            padding: 10px; font-family: monospace; font-size: 14px;
+            pointer-events: none; z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug-box">Durum: BAŞLIYOR...</div>
+
+    <model-viewer 
+        id="viewer" 
+        src="" 
+        camera-controls 
+        touch-action="none" 
+        shadow-intensity="1" 
+        disable-tap 
+        loading="eager"
+    >
+    </model-viewer>
+
+    <script>
+        const viewer = document.querySelector("#viewer");
+        const debugBox = document.getElementById("debug-box");
+
+        function log(msg) {
+            console.log(msg); // Python terminaline gider
+            debugBox.innerText = msg; // Ekrana yazar
+        }
+
+        log("HTML Yüklendi (Kırmızı)");
+
+        // Sayfa tamamen hazır olduğunda
+        window.addEventListener('load', () => {
+            document.body.style.backgroundColor = "green"; // YEŞİL
+            log("Sayfa Hazır: LOADED:READY (Yeşil)");
+        });
+
+        // Modeli değiştirme fonksiyonu
+        window.changeModel = (modelUrl) => {
+            document.body.style.backgroundColor = "blue"; // MAVİ
+            log("Python Emri Geldi: " + modelUrl + " (Mavi)");
+            
+            try {
+                viewer.src = modelUrl;
+            } catch (err) {
+                log("HATA: src atanırken sorun oldu: " + err);
+            }
+        };
+
+        // Model Yükleme Hatası
+        viewer.addEventListener('error', (e) => {
+            document.body.style.backgroundColor = "yellow"; // SARI
+            log("MODEL HATASI: " + e.detail.type);
+        });
+
+        // Tıklama Testi
+        viewer.addEventListener('click', () => {
+            log("Tıklandı (Etkileşim Var)");
+        });
+
+    </script>
+</body>
+</html>

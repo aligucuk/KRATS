@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>body { background-color: red; color: white; font-size: 50px; text-align: center; padding-top: 100px; }</style>
+</head>
+<body>
+    <h1>TEST ÇALIŞIYOR</h1>
+    <p>Eğer bunu görüyorsan WebView sağlam.</p>
+    <script>
+        document.body.innerHTML += "<br>JavaScript de çalışıyor!";
+        
+        // Python'dan çağrılacak test fonksiyonu
+        window.changeModel = function(yol) {
+            alert("Python'dan mesaj geldi: " + yol);
+            document.body.innerHTML += "<br>Python Bağlantısı: OK (" + yol + ")";
+        }
+    </script>
+</body>
+</html>

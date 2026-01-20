@@ -1,0 +1,53 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Atlas</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; }
+        model-viewer { width: 100vw; height: 100vh; }
+        #debug-console {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0, 0, 0, 0.8); color: lime;
+            padding: 10px; border-radius: 5px; font-size: 12px;
+            pointer-events: none; z-index: 999; max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug-console">Atlas Hazır. Model Bekleniyor...</div>
+
+    <model-viewer 
+        id="viewer" 
+        src="" 
+        camera-controls 
+        auto-rotate
+        shadow-intensity="1">
+    </model-viewer>
+
+    <script>
+        const debugBox = document.getElementById('debug-console');
+        function log(msg) { debugBox.innerHTML = msg; }
+
+        // Python'dan çağrılacak fonksiyon
+        window.changeModel = (modelPath) => {
+            log("Yükleniyor: " + modelPath);
+            const viewer = document.querySelector("#viewer");
+            
+            // Modeli yükle
+            viewer.src = modelPath;
+            
+            viewer.addEventListener('load', () => {
+                log("BAŞARILI: " + modelPath + " yüklendi.");
+            });
+            
+            viewer.addEventListener('error', (e) => {
+                log("HATA: Dosya bulunamadı! (" + modelPath + ")");
+            });
+        };
+    </script>
+</body>
+</html>
