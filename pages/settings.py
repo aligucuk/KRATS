@@ -1,5 +1,4 @@
 import flet as ft
-import os  # ✅ EKLENDİ
 from utils.system_id import get_device_fingerprint
 from utils.license_manager import LicenseManager
 from utils.whatsapp_bot import WhatsAppBot
@@ -69,7 +68,7 @@ class SettingsPage:
         self.load_users(update_ui=False)
         self.check_license(update_ui=False)
 
-        # 1. Lisans Bilgileri (Session'dan al)
+         # 1. Lisans Bilgileri (Session'dan al)
         lic_info = self.page.session.get("license_info") or {"expiry": "Bilinmiyor", "limit": 0}
         
         lic_card = ft.Card(
@@ -136,6 +135,7 @@ class SettingsPage:
             ft.ElevatedButton("API Kaydet", on_click=self.save_api),
             ft.Divider(),
             ft.Row([
+                # HATA DÜZELTİLDİ: Icons.WHATSAPP yerine Icons.CHAT
                 ft.Icon(ft.Icons.CHAT, color="green"),
                 ft.Text("WhatsApp Bot Entegrasyonu", weight="bold"),
                 ft.Container(expand=True),
@@ -185,113 +185,51 @@ class SettingsPage:
         self.user_table.rows = []
         for u in self.db.get_all_users():
             try:
-                spec = u[5] if len(u) > 5 and u[5] else "Genel"
+                spec = u[5] if len(u)>5 and u[5] else "Genel"
                 self.user_table.rows.append(ft.DataRow(cells=[
                     ft.DataCell(ft.Text(u[2], weight="bold")),
                     ft.DataCell(ft.Text(u[1])),
                     ft.DataCell(ft.Container(content=ft.Text(spec, size=10, color="teal"), bgcolor=ft.Colors.TEAL_50, padding=5, border_radius=5)),
                     ft.DataCell(ft.Text(str(u[3]).upper()))
                 ]))
-            except: 
-                pass
-        if update_ui: 
-            self.user_table.update()
+            except: pass
+        if update_ui: self.user_table.update()
 
     def add_user(self, e):
-        if not self.txt_username.value: 
-            return
-        success, msg = self.db.add_user_secure(
-            self.txt_username.value, 
-            self.txt_password.value, 
-            self.txt_fullname.value, 
-            self.dd_role.value, 
-            specialty=self.dd_specialty.value
-        )
+        if not self.txt_username.value: return
+        success, msg = self.db.add_user_secure(self.txt_username.value, self.txt_password.value, self.txt_fullname.value, self.dd_role.value, specialty=self.dd_specialty.value)
         self.page.open(ft.SnackBar(ft.Text(msg), bgcolor="green" if success else "red"))
-        if success: 
-            self.load_users()
+        if success: self.load_users()
 
     def save_api(self, e):
         self.db.set_setting("api_email_user", self.txt_email_user.value)
-        self.db.set_setting("api_email_pass", self.txt_email_pass.value)
-        self.page.open(ft.SnackBar(ft.Text("API bilgileri kaydedildi"), bgcolor="green"))
+        self.page.open(ft.SnackBar(ft.Text("Kaydedildi"), bgcolor="green"))
 
     def reset_license(self, e):
-        """Lisans dosyasını siler ve programı kapatır"""
         if os.path.exists("license.key"):
             os.remove("license.key")
             self.page.snack_bar = ft.SnackBar(ft.Text("Lisans silindi. Program kapanıyor..."))
             self.page.snack_bar.open = True
             self.page.update()
-            import time
-            time.sleep(2)
-            self.page.window_destroy()
-        else:
-            self.page.open(ft.SnackBar(ft.Text("Lisans dosyası bulunamadı"), bgcolor="orange"))
+            import time; time.sleep(2)
+            self.page.window.destroy()
 
     def backup_db(self, e):
-        """Veritabanını yedekler"""
-        try:
-            bm = BackupManager(self.db)  # ✅ DÜZELTİLDİ: self.db parametresi eklendi
-            
-            def on_backup_complete(success, msg):
-                color = "green" if success else "red"
-                self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
-                self.page.snack_bar.open = True
-                self.page.update()
-            
-            bm.create_backup(on_complete=on_backup_complete)
-            self.page.open(ft.SnackBar(ft.Text("Yedekleme başlatıldı..."), bgcolor="blue"))
-        except Exception as ex:
-            self.page.open(ft.SnackBar(ft.Text(f"Yedekleme hatası: {ex}"), bgcolor="red"))
+        bm = BackupManager()
+        success, msg = bm.create_backup("krats.db") # Senin DB adın
+        color = "green" if success else "red"
+        self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
+        self.page.snack_bar.open = True
+        self.page.update()
 
     def connect_google(self, e):
-        """Google Takvim'e bağlanır"""
-        try:
-            gm = GoogleCalendarManager()
-            success, msg = gm.connect_account()
-            self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="green" if success else "red")
-            self.page.snack_bar.open = True
-            self.page.update()
-        except Exception as ex:
-            self.page.open(ft.SnackBar(ft.Text(f"Google bağlantı hatası: {ex}"), bgcolor="red"))
+        gm = GoogleCalendarManager()
+        success, msg = gm.connect_account() # Bu fonksiyonu önceki cevapta eklemiştik
+        self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="green" if success else "red")
+        self.page.snack_bar.open = True
+        self.page.update()
 
-    def check_license(self, update_ui=True):
-        """Lisans durumunu kontrol eder"""
-        lic_info = self.page.session.get("license_info")
-        if lic_info:
-            self.license_info.value = f"Bitiş: {lic_info.get('expiry', '-')} | Limit: {lic_info.get('limit', 0)}"
-        else:
-            self.license_info.value = "Lisans bilgisi bulunamadı"
-        if update_ui:
-            try:
-                self.license_info.update()
-            except:
-                pass
-
-    def activate_license(self, e):
-        """Yeni lisans anahtarı aktive eder"""
-        key = self.txt_license.value.strip()
-        if not key:
-            self.page.open(ft.SnackBar(ft.Text("Lisans anahtarı giriniz"), bgcolor="red"))
-            return
-        
-        valid, msg, limit, expiry = self.lm.validate_license(key)
-        if valid:
-            with open("license.key", "w") as f:
-                f.write(key)
-            self.page.session.set("license_info", {"limit": limit, "expiry": expiry})
-            self.page.open(ft.SnackBar(ft.Text("Lisans aktive edildi!"), bgcolor="green"))
-            self.check_license()
-        else:
-            self.page.open(ft.SnackBar(ft.Text(f"Hata: {msg}"), bgcolor="red"))
-
-    def run_bot(self, e):
-        """WhatsApp botunu başlatır"""
-        try:
-            self.page.open(ft.SnackBar(ft.Text("WhatsApp Bot başlatılıyor... Lütfen bekleyin."), bgcolor="blue"))
-            bot = WhatsAppBot(self.db)
-            result = bot.start_bot()
-            self.page.open(ft.SnackBar(ft.Text(result), bgcolor="green"))
-        except Exception as ex:
-            self.page.open(ft.SnackBar(ft.Text(f"Bot hatası: {ex}"), bgcolor="red"))
+    def check_license(self, update_ui=True): pass 
+    def activate_license(self, e): pass
+    def backup_db(self, e): pass
+    def run_bot(self, e): pass
