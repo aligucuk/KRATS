@@ -4,6 +4,10 @@ import zipfile
 import os
 import shutil
 import subprocess
+import logging
+
+# Loglama ayarla
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def install_update(zip_path, target_dir):
     # Ana uygulamanın tamamen kapanması için 2 saniye bekle
@@ -21,13 +25,25 @@ def install_update(zip_path, target_dir):
         extracted_folder = os.listdir("temp_update")[0]
         source_path = os.path.join("temp_update", extracted_folder)
 
+        # ✅ Düzeltildi: Korunacak dosyalar genişletildi
+        PROTECTED_FILES = {
+            ".env", 
+            "*.db", 
+            "*.key", 
+            "assets/uploads", 
+            "updater.py",
+            "token.json",
+            "backups"
+        }
+
         print("Dosyalar güncelleniyor...")
         for item in os.listdir(source_path):
             s = os.path.join(source_path, item)
             d = os.path.join(target_dir, item)
             
-            # .env veya veritabanı gibi dosyaları ezmemeliyiz!
-            if item in [".env", "klinik_db", "assets/uploads", "updater.py"]:
+            # Korunan dosyaları ezme
+            if item in PROTECTED_FILES or any(item.endswith(ext.replace('*', '')) for ext in PROTECTED_FILES if '*' in ext):
+                logging.info(f"Korunuyor: {item}")
                 continue
                 
             if os.path.isdir(s):
@@ -42,7 +58,7 @@ def install_update(zip_path, target_dir):
         shutil.rmtree("temp_update")
         os.remove(zip_path)
 
-        print("Güncelleme tamamlandı! Uygulama başlatılıyor...")
+        print("✅ Güncelleme tamamlandı! Uygulama başlatılıyor...")
         
         # 4. Ana uygulamayı tekrar başlat
         if sys.platform == "win32":
@@ -51,7 +67,7 @@ def install_update(zip_path, target_dir):
             subprocess.Popen(["python3", "main.py"])
             
     except Exception as e:
-        print(f"HATA OLUŞTU: {e}")
+        logging.error(f"HATA OLUŞTU: {e}")
         input("Çıkmak için Enter'a basın...")
 
 if __name__ == "__main__":

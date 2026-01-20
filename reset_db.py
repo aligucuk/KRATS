@@ -3,7 +3,7 @@ import sqlite3
 from database.db_manager import DatabaseManager
 
 def full_reset():
-    db_file = "clinic.db"
+    db_file = "krats.db"  # ✅ Düzeltildi: clinic.db → krats.db
     
     print("⚠️  DİKKAT: Bu işlem TÜM hastaları, randevuları ve kullanıcıları SİLECEK!")
     confirm = input("Onaylıyor musunuz? (evet/hayır): ")

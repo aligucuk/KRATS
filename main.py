@@ -29,15 +29,43 @@ from pages.tv_display import TVDisplayPage
 from pages.ai_assistant import AIAssistantPage
 from pages.medical_news import MedicalNewsPage
 
-def start_3d_server():
-    """3D Model sunucusunu başlatır"""
+ddef start_3d_server():
+    """3D Model sunucusunu başlatır - Port çakışması korumalı"""
+    import socket
+    
+    def find_free_port(start=8000, end=8100):
+        """Boş port bul"""
+        for port in range(start, end):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('', port))
+                    return port
+            except OSError:
+                continue
+        return None
+    
+    port = find_free_port()
+    if not port:
+        print("⚠️  HTTP sunucu için boş port bulunamadı (8000-8100 arası dolu)")
+        return
+    
     try:
-        # Port 8000 doluysa hata verebilir, sessizce geç
         if sys.platform == "win32":
-            subprocess.Popen([sys.executable, "-m", "http.server", "8000", "--directory", "assets"], creationflags=subprocess.CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [sys.executable, "-m", "http.server", str(port), "--directory", "assets"], 
+                creationflags=subprocess.CREATE_NO_WINDOW, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
         else:
-            subprocess.Popen(["python3", "-m", "http.server", "8000", "--directory", "assets"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except: pass
+            subprocess.Popen(
+                ["python3", "-m", "http.server", str(port), "--directory", "assets"], 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+        print(f"✅ 3D sunucu başlatıldı: http://localhost:{port}")
+    except Exception as e:
+        print(f"⚠️  HTTP sunucu başlatılamadı: {e}")
 
 def main(page: ft.Page):
     

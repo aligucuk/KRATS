@@ -6,8 +6,8 @@ def factory_reset():
     print("⚠️  FABRİKA AYARLARINA DÖNÜLÜYOR... ⚠️")
     print("-" * 40)
 
-    # 1. Lisans ve Google Oturumunu SİL (Kalıcı)
-    files_to_delete = ["license.key", "token.json"]
+    # 1. Google Oturumunu SİL (Lisans KORUNUYOR) ✅ Düzeltildi
+    files_to_delete = ["token.json"]
     
     for filename in files_to_delete:
         if os.path.exists(filename):
@@ -24,9 +24,15 @@ def factory_reset():
     if os.path.exists(db_file):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"krats_YEDEK_{timestamp}.db"
+        
+        # Backups klasörü yoksa oluştur
+        os.makedirs("backups", exist_ok=True)
+        backup_path = os.path.join("backups", backup_name)
+        
         try:
-            os.rename(db_file, backup_name)
-            print(f"📦 YEDEKLENDİ: {db_file} -> {backup_name} (Sıfır DB oluşturulacak)")
+            shutil.copy2(db_file, backup_path)
+            os.remove(db_file)
+            print(f"📦 YEDEKLENDİ: {db_file} -> {backup_path}")
         except Exception as e:
             print(f"❌ DB HATA: {e}")
     else:
@@ -34,9 +40,10 @@ def factory_reset():
 
     print("-" * 40)
     print("🚀 İŞLEM TAMAM! Programı (main.py) şimdi açarsan sıfırdan kurulum yapacak.")
+    print("💡 NOT: license.key korundu, tekrar aktivasyon gerekmez.")
 
 if __name__ == "__main__":
-    confirm = input("TÜM VERİLER VE LİSANS SIFIRLANACAK. Emin misin? (e/h): ")
+    confirm = input("TÜM VERİLER SIFIRLANACAK (Lisans korunur). Emin misin? (e/h): ")
     if confirm.lower() == "e":
         factory_reset()
     else:
