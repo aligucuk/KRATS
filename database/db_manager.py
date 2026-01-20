@@ -11,8 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from config import settings
 from utils.logger import get_logger
 from utils.exceptions import DatabaseException
-from utils.security import security_manager
-from utils.encryption import encryption_manager
+from utils.security_manager import SecurityManager
+from utils.encryption_manager import encryption_manager
 from .models import (
     Base, User, Patient, Appointment, Transaction, Product,
     Message, MedicalRecord, PatientFile, Setting, AuditLog,

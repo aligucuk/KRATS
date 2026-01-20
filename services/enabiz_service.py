@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 from config import settings
 from utils.logger import get_logger
-from utils.encryption import encryption_manager
+from utils.encryption_manager import encryption_manager
 from utils.exceptions import IntegrationException
 
 logger = get_logger(__name__)

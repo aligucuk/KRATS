@@ -20,7 +20,7 @@ class LicenseService:
     def __init__(self):
         """Initialize license service with encryption key from settings"""
         if not settings.LICENSE_SECRET_KEY:
-            raise LicenseException("LICENSE_SECRET_KEY not configured")
+            raise LicenseException("LICENSE_SECRET_KEY b'L33izrilqC9FgXtnRaae54vB62Clt6kDckDzBODoNXQ=' ")
         
         try:
             # Ensure key is bytes
