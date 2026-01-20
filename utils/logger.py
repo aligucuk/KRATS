@@ -49,18 +49,17 @@ def setup_logging(log_level=logging.INFO, log_file=None):
 def get_logger(name):
     """
     Belirli bir modül için logger döndür
-    
-    Args:
-        name (str): Logger adı (genellikle __name__)
-    
-    Returns:
-        logging.Logger: Yapılandırılmış logger instance
     """
     return logging.getLogger(name)
 
-# Varsayılan yapılandırma
-if not logging.getLogger().handlers:
-    setup_logging(
-        log_level=logging.INFO,
-        log_file=f"krats_{datetime.now().strftime('%Y%m%d')}.log"
-    )
+# --- KRİTİK EKLEME: Global app_logger Tanımlaması ---
+# Diğer dosyaların 'from utils.logger import app_logger' diyebilmesi için
+# bu değişkenin burada tanımlı olması şart.
+
+log_filename = f"krats_{datetime.now().strftime('%Y%m%d')}.log"
+
+# Loglamayı başlat ve app_logger değişkenine ata
+app_logger = setup_logging(
+    log_level=logging.INFO,
+    log_file=log_filename
+)

@@ -9,6 +9,7 @@ from utils.logger import app_logger
 from utils.encryption_manager import EncryptionManager
 
 
+
 class PatientListPage:
     def __init__(self, page: ft.Page, db: DatabaseManager):
         self.page = page

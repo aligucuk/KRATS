@@ -1,22 +1,13 @@
-# ui/pages/login.py
-
 import flet as ft
 from database.db_manager import DatabaseManager
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 class LoginPage:
     """Modern glassmorphic login page"""
     
     def __init__(self, page: ft.Page, db: DatabaseManager):
-        """Initialize login page
-        
-        Args:
-            page: Flet page instance
-            db: Database manager
-        """
         self.page = page
         self.db = db
         self.page.title = "Giriş - KRATS"
@@ -47,11 +38,6 @@ class LoginPage:
         )
     
     def view(self) -> ft.View:
-        """Build login view
-        
-        Returns:
-            Login view
-        """
         # Glass effect login card
         login_card = ft.Container(
             content=ft.Column([
@@ -75,12 +61,14 @@ class LoginPage:
                     on_click=self.login_click
                 ),
                 ft.Container(height=10),
+                # Erişilebilirlik Butonu
                 ft.TextButton(
-                    "Erişilebilirlik",
+                    "Erişilebilirlik Modu",
+                    icon=ft.Icons.ACCESSIBILITY_NEW,
                     on_click=self.toggle_access,
                     style=ft.ButtonStyle(color="white70")
                 )
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
             
             width=350,
             padding=40,
@@ -94,45 +82,47 @@ class LoginPage:
             )
         )
         
-        # Background gradient
+        # Basitleştirilmiş Layout (Stack yerine Column/Row kullanıldı)
         return ft.View(
             "/login",
             controls=[
                 ft.Container(
-                    content=ft.Stack([
-                        # Background gradient
-                        ft.Container(
-                            gradient=ft.LinearGradient(
-                                begin=ft.alignment.top_left,
-                                end=ft.alignment.bottom_right,
-                                colors=["#0f2027", "#203a43", "#2c5364"]
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(expand=True), # Üst boşluk (itici)
+                            
+                            # Kartı ortalamak için Row
+                            ft.Row(
+                                controls=[login_card],
+                                alignment=ft.MainAxisAlignment.CENTER
                             ),
-                            expand=True
-                        ),
-                        # Login card (centered)
-                        ft.Container(
-                            content=login_card,
-                            alignment=ft.alignment.center
-                        ),
-                        # Footer
-                        ft.Container(
-                            content=ft.Text(
+                            
+                            ft.Container(expand=True), # Alt boşluk (itici)
+                            
+                            # Footer
+                            ft.Text(
                                 "KRATS Clinical OS v3.0",
                                 color="white24",
                                 size=12
                             ),
-                            alignment=ft.alignment.bottom_center,
-                            padding=20
-                        )
-                    ]),
-                    expand=True
+                            ft.Container(height=20) # En alt padding
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                    ),
+                    # Arka Plan Gradient
+                    gradient=ft.LinearGradient(
+                        begin=ft.alignment.top_left,
+                        end=ft.alignment.bottom_right,
+                        colors=["#0f2027", "#203a43", "#2c5364"]
+                    ),
+                    expand=True,
+                    padding=20
                 )
             ],
             padding=0
         )
     
     def login_click(self, e):
-        """Handle login button click"""
         username = self.user_input.value
         password = self.pass_input.value
         
@@ -141,18 +131,14 @@ class LoginPage:
             return
         
         try:
-            # Authenticate
             user = self.db.authenticate_user(username, password)
             
             if user:
-                # Store session data
                 self.page.session.set("user_id", user.id)
                 self.page.session.set("user_name", user.full_name)
                 self.page.session.set("role", user.role.value)
                 
                 logger.info(f"User logged in: {username}")
-                
-                # Maximize window and navigate
                 self.page.window.maximized = True
                 self.page.go("/doctor_home")
             else:
@@ -163,7 +149,6 @@ class LoginPage:
             self.show_error("Giriş sırasında bir hata oluştu")
     
     def toggle_access(self, e):
-        """Toggle theme mode for accessibility"""
         if self.page.theme_mode == ft.ThemeMode.LIGHT:
             self.page.theme_mode = ft.ThemeMode.DARK
         else:
@@ -171,11 +156,6 @@ class LoginPage:
         self.page.update()
     
     def show_error(self, message: str):
-        """Show error message
-        
-        Args:
-            message: Error message to display
-        """
         self.page.open(
             ft.SnackBar(
                 ft.Text(message),

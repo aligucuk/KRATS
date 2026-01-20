@@ -1,7 +1,8 @@
-import hashlib
 import os
 import logging
-from cryptography.fernet import Fernet
+import hashlib
+import bcrypt  # Şifreler için (Login)
+from cryptography.fernet import Fernet # Veriler için (TC, Tel vb.)
 
 # Loglama ayarı
 logging.basicConfig(level=logging.WARNING)
@@ -9,66 +10,89 @@ logger = logging.getLogger("SecurityManager")
 
 class SecurityManager:
     def __init__(self):
+        # 1. Veri Şifreleme Anahtarını Yükle (Fernet)
         self.key = self._load_key()
         try:
             self.cipher = Fernet(self.key)
         except Exception as e:
-            logger.critical(f"Şifreleme anahtarı hatalı formatta! Uygulama çalışmayabilir. Hata: {e}")
+            logger.critical(f"Şifreleme anahtarı hatalı! Hata: {e}")
             raise e
 
     def _load_key(self):
         """
-        Anahtarı yükleme önceliği:
-        1. Environment Variable (CLINIC_APP_SECRET_KEY)
-        2. Yerel 'secret.key' dosyası
-        3. Yeniden oluşturma
+        Anahtarı yükleme önceliği: Environment -> Dosya -> Oluştur
         """
-        # 1. Ortam Değişkeni Kontrolü
+        # Ortam değişkeni
         env_key = os.getenv("CLINIC_APP_SECRET_KEY")
         if env_key:
             return env_key.encode()
 
-        # 2. Dosya Kontrolü
+        # Dosya kontrolü
         key_file = "secret.key"
         if os.path.exists(key_file):
             with open(key_file, "rb") as file:
                 return file.read()
         
-        # 3. Yeni Anahtar Oluşturma
+        # Yoksa oluştur
         logger.warning("Anahtar bulunamadı. Yeni bir 'secret.key' oluşturuluyor.")
         key = Fernet.generate_key()
         with open(key_file, "wb") as file:
             file.write(key)
         return key
 
-    # --- EKSİK OLAN HASH METODLARI (Login Hatası İçin) ---
-    def hash_password(self, password):
-        """Şifreyi SHA256 ile hashler (Geri döndürülemez)"""
+    # --- PASSWORD BÖLÜMÜ (BCRYPT - GÜVENLİ) ---
+    
+    def hash_password(self, password: str) -> str:
+        """Şifreyi BCrypt ile güvenli hashler (Yavaş ve Tuzlu)"""
         if not password: return ""
-        return hashlib.sha256(password.encode()).hexdigest()
+        try:
+            # String -> Bytes
+            password_bytes = password.encode('utf-8')
+            # Salt + Hash
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(password_bytes, salt)
+            # Bytes -> String (Veritabanı için)
+            return hashed.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Hash hatası: {e}")
+            return ""
 
-    def verify_password(self, stored_hash, provided_password):
-        """Girilen şifre doğru mu kontrol eder"""
+    def verify_password(self, provided_password: str, stored_hash: str) -> bool:
+        """Giriş şifresini doğrular"""
         if not provided_password or not stored_hash: return False
-        current_hash = hashlib.sha256(provided_password.encode()).hexdigest()
-        return current_hash == stored_hash
+        try:
+            # String -> Bytes
+            password_bytes = provided_password.encode('utf-8')
+            hash_bytes = stored_hash.encode('utf-8')
+            # Kontrol et
+            return bcrypt.checkpw(password_bytes, hash_bytes)
+        except Exception as e:
+            logger.error(f"Doğrulama hatası: {e}")
+            return False
 
-    # --- VERİ ŞİFRELEME (db_manager ile uyumlu isimler) ---
+    def validate_password_strength(self, password: str) -> tuple:
+        if len(password) < 4:
+            return False, "Şifre en az 4 karakter olmalı."
+        return True, "Geçerli"
+
+    # --- VERİ BÖLÜMÜ (FERNET - HASTA BİLGİLERİ İÇİN) ---
+
     def encrypt_data(self, plain_text):
-        """Veriyi şifreler (db_manager 'encrypt_data' olarak çağırıyor)"""
+        """Veriyi şifreler (TC, Tel, Adres vb.)"""
         if not plain_text: return ""
         try:
-            return self.cipher.encrypt(str(plain_text).encode()).decode()
+            # Fernet sadece bytes kabul eder
+            return self.cipher.encrypt(str(plain_text).encode('utf-8')).decode('utf-8')
         except Exception as e:
-            logger.error(f"Şifreleme hatası: {e}")
+            logger.error(f"Veri şifreleme hatası: {e}")
             return ""
 
     def decrypt_data(self, encrypted_text):
-        """Şifreyi çözer (db_manager 'decrypt_data' olarak çağırıyor)"""
+        """Şifreli veriyi okur"""
         if not encrypted_text: return ""
         try:
-            return self.cipher.decrypt(str(encrypted_text).encode()).decode()
+            return self.cipher.decrypt(str(encrypted_text).encode('utf-8')).decode('utf-8')
         except Exception as e:
-            # Hata durumunda (eski veri veya bozuk veri) ham halini dön
-            logger.error(f"Şifre çözme hatası: {e}")
-            return encrypted_text
+            # Şifre çözülemezse (eski anahtar vs.) logla ama programı çökertme
+            logger.error(f"Veri çözme hatası: {e}")
+            return str(encrypted_text)

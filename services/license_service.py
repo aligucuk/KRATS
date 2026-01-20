@@ -1,180 +1,141 @@
-# services/license_service.py
-
-import json
-import base64
+import hashlib
+import platform
+import subprocess
+import os
 from datetime import datetime
-from typing import Tuple, Optional
-from cryptography.fernet import Fernet, InvalidToken
+from typing import Dict, Optional
 
+# Yapılandırma dosyasından ayarları çek
 from config import settings
 from utils.logger import get_logger
-from utils.system_id import system_id_manager
-from utils.exceptions import LicenseException
 
 logger = get_logger(__name__)
 
-
 class LicenseService:
-    """License validation and management service"""
-    
     def __init__(self):
-        """Initialize license service with encryption key from settings"""
-        if not settings.LICENSE_SECRET_KEY:
-            raise LicenseException("LICENSE_SECRET_KEY b'L33izrilqC9FgXtnRaae54vB62Clt6kDckDzBODoNXQ=' ")
-        
-        try:
-            # Ensure key is bytes
-            key = settings.LICENSE_SECRET_KEY
-            if isinstance(key, str):
-                key = key.encode()
-            
-            self.cipher = Fernet(key)
-            logger.info("License service initialized")
-            
-        except Exception as e:
-            logger.error(f"License service initialization failed: {e}")
-            raise LicenseException(f"License initialization failed: {str(e)}")
-    
-    def validate_license(self, license_key: str) -> Tuple[bool, str, int, Optional[str]]:
-        """Validate license key
-        
-        Args:
-            license_key: Base64 encoded encrypted license
-            
-        Returns:
-            Tuple of (is_valid, message, user_limit, expiry_date)
+        # Eğer config'den gelmezse varsayılan salt kullan
+        self.secret_salt = settings.HARDWARE_ID_SALT or "KRATS_DEFAULT_SALT_2026"
+        self.license_key_file = "license.key"
+
+    def get_hardware_id(self) -> str:
         """
-        if not license_key:
-            return False, "Lisans anahtarı girilmemiş", 0, None
-        
+        Cihazın benzersiz donanım kimliğini (HWID) üretir.
+        MAC Adresi + İşletim Sistemi bilgisini kullanır.
+        """
         try:
-            # Decode and decrypt
-            decoded_bytes = base64.urlsafe_b64decode(license_key.encode())
-            decrypted_data = self.cipher.decrypt(decoded_bytes)
-            license_data = json.loads(decrypted_data.decode())
+            # İşletim sistemi bilgisi
+            system_info = platform.system() + platform.release()
             
-            # Validate structure
-            required_fields = ['expiry', 'limit']
-            if not all(field in license_data for field in required_fields):
-                return False, "Geçersiz lisans formatı", 0, None
+            # MAC Adresi (UUID modülü daha güvenilirdir)
+            import uuid
+            mac_addr = hex(uuid.getnode()).replace('0x', '').upper()
             
-            # Check expiry date
-            expiry_str = license_data.get('expiry')
-            if expiry_str:
-                try:
-                    expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d")
-                    if datetime.now() > expiry_date:
-                        return False, "Lisans süresi dolmuş", 0, expiry_str
-                except ValueError:
-                    return False, "Geçersiz tarih formatı", 0, None
+            # Ham veriyi birleştir
+            raw_data = f"{mac_addr}-{system_info}-{self.secret_salt}"
+            
+            # SHA256 ile hashle
+            hwid_hash = hashlib.sha256(raw_data.encode()).hexdigest().upper()
+            
+            # Okunabilir format: XXXX-XXXX-XXXX-XXXX
+            formatted_hwid = '-'.join([hwid_hash[i:i+4] for i in range(0, 16, 4)])
+            
+            return formatted_hwid
+        except Exception as e:
+            logger.error(f"HWID oluşturma hatası: {e}")
+            return "UNKNOWN-DEVICE-ID"
+
+    def check_license(self) -> bool:
+        """
+        Lisansın geçerli olup olmadığını kontrol eder.
+        """
+        try:
+            # 1. Kayıtlı lisans anahtarını dosyadan veya Config'den oku
+            stored_key = self._load_license_key()
+            
+            if not stored_key:
+                logger.warning("Lisans anahtarı bulunamadı.")
+                return False
+            
+            # 2. Şu anki donanım için olması gereken anahtarı üret
+            hwid = self.get_hardware_id()
+            expected_key = self._generate_expected_key(hwid)
+            
+            # 3. Karşılaştır
+            if stored_key == expected_key:
+                return True
             else:
-                expiry_str = "Sınırsız"
-            
-            # Check hardware binding
-            hw_id = license_data.get('hw_id')
-            if hw_id:
-                current_hw_id = system_id_manager.get_device_fingerprint()
-                if hw_id != current_hw_id:
-                    logger.warning(f"Hardware mismatch: Expected {hw_id}, got {current_hw_id}")
-                    return False, "Bu lisans başka bir bilgisayara ait", 0, None
-            
-            # Get user limit
-            user_limit = int(license_data.get('limit', 1))
-            
-            # Additional metadata
-            company = license_data.get('company', '')
-            logger.info(f"License validated successfully for {company}")
-            
-            return True, "Lisans geçerli", user_limit, expiry_str
-            
-        except InvalidToken:
-            logger.warning("Invalid license token")
-            return False, "Geçersiz lisans anahtarı", 0, None
-        except json.JSONDecodeError:
-            logger.warning("License JSON decode error")
-            return False, "Bozuk lisans verisi", 0, None
+                logger.warning(f"Geçersiz lisans anahtarı! Beklenen: {expected_key}, Bulunan: {stored_key}")
+                return False
+                
         except Exception as e:
-            logger.error(f"License validation error: {e}")
-            return False, f"Doğrulama hatası: {str(e)}", 0, None
-    
-    def generate_license(
-        self, company: str, user_limit: int,
-        expiry_date: Optional[str] = None,
-        bind_to_hardware: bool = False
-    ) -> str:
-        """Generate new license key (for license server use)
-        
-        Args:
-            company: Company name
-            user_limit: Maximum number of users
-            expiry_date: Expiry date in YYYY-MM-DD format (None for unlimited)
-            bind_to_hardware: Whether to bind to current hardware
-            
-        Returns:
-            Base64 encoded license key
+            logger.error(f"Lisans kontrol hatası: {e}")
+            return False
+
+    def activate_license(self, input_key: str) -> bool:
+        """
+        Girilen anahtarı doğrular ve geçerliyse kaydeder.
         """
         try:
-            license_data = {
-                'company': company,
-                'limit': user_limit,
-                'expiry': expiry_date,
-                'issued': datetime.now().strftime("%Y-%m-%d"),
-                'version': settings.APP_VERSION
-            }
+            hwid = self.get_hardware_id()
+            expected_key = self._generate_expected_key(hwid)
             
-            # Add hardware binding
-            if bind_to_hardware:
-                license_data['hw_id'] = system_id_manager.get_device_fingerprint()
+            # Boşlukları temizle
+            clean_input_key = input_key.strip().upper()
             
-            # Encrypt and encode
-            json_data = json.dumps(license_data)
-            encrypted = self.cipher.encrypt(json_data.encode())
-            license_key = base64.urlsafe_b64encode(encrypted).decode()
-            
-            logger.info(f"License generated for {company}")
-            return license_key
-            
+            if clean_input_key == expected_key:
+                self._save_license_key(clean_input_key)
+                logger.info("Lisans başarıyla etkinleştirildi.")
+                return True
+            else:
+                logger.warning("Lisans etkinleştirme başarısız: Anahtar hatalı.")
+                return False
+                
         except Exception as e:
-            logger.error(f"License generation failed: {e}")
-            raise LicenseException(f"License generation failed: {str(e)}")
-    
-    def get_license_info(self, license_key: str) -> Optional[dict]:
-        """Get license information without full validation
-        
-        Args:
-            license_key: License key to decode
-            
-        Returns:
-            License data dictionary or None
+            logger.error(f"Aktivasyon hatası: {e}")
+            return False
+
+    def get_license_info(self) -> Dict:
         """
+        Lisans bilgilerini döndürür (Arayüzde göstermek için).
+        """
+        is_valid = self.check_license()
+        return {
+            "status": "Aktif" if is_valid else "Lisanssız",
+            "hardware_id": self.get_hardware_id(),
+            "license_type": "Pro" if is_valid else "Deneme",
+            "user_limit": "Sınırsız" if is_valid else "1"
+        }
+
+    # --- YARDIMCI METOTLAR (Private) ---
+
+    def _generate_expected_key(self, hwid: str) -> str:
+        """
+        Bir HWID için geçerli olması gereken lisans anahtarını üretir.
+        Mantık: SHA256(HWID + SECRET_KEY) -> İlk 16 karakter
+        """
+        # Config'deki gizli anahtarı kullan (yoksa varsayılan)
+        secret = settings.LICENSE_SECRET_KEY or "SUPER_SECRET_KEY_99"
+        
+        raw = f"{hwid}|{secret}"
+        hashed = hashlib.sha256(raw.encode()).hexdigest().upper()
+        
+        # XXXX-XXXX-XXXX-XXXX formatında
+        return '-'.join([hashed[i:i+4] for i in range(0, 16, 4)])
+
+    def _load_license_key(self) -> Optional[str]:
+        """Kayıtlı lisans anahtarını dosyadan okur."""
+        if os.path.exists(self.license_key_file):
+            try:
+                with open(self.license_key_file, "r") as f:
+                    return f.read().strip()
+            except:
+                return None
+        return None
+
+    def _save_license_key(self, key: str):
+        """Lisans anahtarını dosyaya kaydeder."""
         try:
-            decoded_bytes = base64.urlsafe_b64decode(license_key.encode())
-            decrypted_data = self.cipher.decrypt(decoded_bytes)
-            return json.loads(decrypted_data.decode())
+            with open(self.license_key_file, "w") as f:
+                f.write(key)
         except Exception as e:
-            logger.error(f"Failed to get license info: {e}")
-            return None
-    
-    def check_user_limit(self, license_key: str, current_users: int) -> Tuple[bool, str]:
-        """Check if current user count is within license limit
-        
-        Args:
-            license_key: License key
-            current_users: Current number of active users
-            
-        Returns:
-            Tuple of (within_limit, message)
-        """
-        is_valid, msg, limit, expiry = self.validate_license(license_key)
-        
-        if not is_valid:
-            return False, msg
-        
-        if limit > 0 and current_users >= limit:
-            return False, f"Kullanıcı kotası dolu ({current_users}/{limit})"
-        
-        return True, f"Kullanılabilir: {current_users}/{limit}"
-
-
-# Global instance
-license_service = LicenseService()
+            logger.error(f"Lisans dosyası yazma hatası: {e}")

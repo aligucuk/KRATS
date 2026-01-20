@@ -16,7 +16,8 @@ from database.db_manager import DatabaseManager
 from services.license_service import LicenseService
 from services.notification_service import NotificationService
 from ui.app_layout import AppLayout
-from config import Config
+# Config sınıfı Settings olarak tanımlandığı için takma ad (alias) kullanıyoruz
+from config import Settings as Config
 
 # Sayfalar
 from ui.pages.login import LoginPage
@@ -67,84 +68,106 @@ def main(page: ft.Page):
     )
     
     # ============================================
-    # 1. LİSANS KONTROLÜ (En Önce!)
+    # 1. LİSANS KONTROLÜ (Görsel Ekranlı)
     # ============================================
     license_service = LicenseService()
     
+    # Eğer lisans geçerli değilse Lisans Ekranını göster
     if not license_service.check_license():
-        # Lisans yoksa aktivasyon ekranı göster
-        def activate_license(e):
-            key = txt_license_key.value.strip()
-            if not key:
-                return
-            
-            if license_service.activate_license(key):
-                dlg.open = False
-                page.update()
-                # Uygulamayı yeniden başlat
-                page.window.destroy()
-                sys.exit(0)
-            else:
-                lbl_error.value = "❌ Geçersiz lisans anahtarı!"
-                lbl_error.update()
-        
-        # Lisans aktivasyon dialog
-        hwid = license_service.get_hardware_id()
-        
-        txt_license_key = ft.TextField(
-            label="Lisans Anahtarı",
-            width=400,
-            text_align="center",
-            border_radius=10
-        )
-        
-        lbl_error = ft.Text("", color="red", size=14)
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("🔒 Lisans Aktivasyonu Gerekli"),
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Icon(ft.Icons.LOCK_CLOCK, size=80, color="red"),
-                    ft.Text(
-                        "Bu yazılım lisanssızdır.",
-                        size=16,
-                        text_align="center"
-                    ),
-                    ft.Divider(),
-                    ft.Text("Cihaz ID (Satıcıya iletin):", weight="bold"),
-                    ft.Container(
-                        content=ft.Text(
-                            hwid,
-                            size=14,
-                            weight="bold",
-                            selectable=True
-                        ),
-                        bgcolor="#f0f0f0",
-                        padding=10,
-                        border_radius=5
-                    ),
-                    ft.Divider(),
-                    txt_license_key,
-                    lbl_error
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15),
-                width=500,
-                padding=20
-            ),
-            actions=[
-                ft.ElevatedButton(
-                    "Aktive Et",
-                    bgcolor="green",
-                    color="white",
-                    on_click=activate_license
-                )
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER
-        )
-        
-        page.open(dlg)
-        return  # Lisans olmadan devam etme
+        show_license_screen(page, license_service)
+        return
+
+    # Lisans varsa uygulamayı başlat
+    init_app(page)
+
+def show_license_screen(page: ft.Page, license_service: LicenseService):
+    """Lisans yoksa gösterilecek tam ekran form"""
     
+    page.clean()
+    hwid = license_service.get_hardware_id()
+    
+    txt_license_key = ft.TextField(
+        label="Lisans Anahtarı",
+        width=400,
+        text_align="center",
+        border_radius=10,
+        prefix_icon=ft.Icons.KEY
+    )
+    
+    lbl_error = ft.Text("", color="red", size=14)
+    
+    def activate_click(e):
+        key = txt_license_key.value.strip()
+        if not key:
+            lbl_error.value = "Lütfen anahtar giriniz."
+            lbl_error.update()
+            return
+        
+        if license_service.activate_license(key):
+            # Başarılı!
+            page.snack_bar = ft.SnackBar(ft.Text("Lisans Aktif! Uygulama açılıyor..."), bgcolor="green")
+            page.snack_bar.open = True
+            page.update()
+            
+            # Uygulamayı başlat
+            init_app(page)
+        else:
+            lbl_error.value = "❌ Geçersiz lisans anahtarı!"
+            lbl_error.update()
+
+    # Ekran tasarımı
+    page.add(
+        ft.Container(
+            content=ft.Column([
+                ft.Icon(ft.Icons.LOCK_CLOCK, size=80, color="red"),
+                ft.Text("KRATS Klinik Sistemi", size=30, weight="bold"),
+                ft.Text("Bu yazılım lisanssızdır. Lütfen aktive edin.", size=16, color="grey"),
+                ft.Divider(height=20, color="transparent"),
+                
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Donanım Kimliğiniz (HWID):", weight="bold"),
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Text(hwid, size=16, font_family="monospace", weight="bold", selectable=True),
+                                ft.IconButton(ft.Icons.COPY, tooltip="Kopyala", on_click=lambda _: page.set_clipboard(hwid))
+                            ], alignment=ft.MainAxisAlignment.CENTER),
+                            bgcolor=ft.Colors.GREY_100,
+                            padding=10,
+                            border_radius=5
+                        )
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=10
+                ),
+                
+                ft.Container(height=20),
+                txt_license_key,
+                lbl_error,
+                ft.Container(height=20),
+                
+                ft.ElevatedButton(
+                    "Lisansı Aktifleştir",
+                    icon=ft.Icons.CHECK_CIRCLE,
+                    bgcolor="teal",
+                    color="white",
+                    width=250,
+                    height=50,
+                    on_click=activate_click
+                )
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True
+        )
+    )
+    page.update()
+
+def init_app(page: ft.Page):
+    """Lisans kontrolünden sonra uygulamayı başlatan fonksiyon"""
+    
+    # Önce sayfayı temizle
+    page.clean()
+    
+    license_service = LicenseService()
     # Lisans bilgilerini session'a kaydet
     license_info = license_service.get_license_info()
     page.session.set("license_info", license_info)
@@ -181,7 +204,7 @@ def main(page: ft.Page):
     # ============================================
     try:
         notification_service = NotificationService(db)
-        notification_service.start_daemon()
+        notification_service.start() # DÜZELTME: start_daemon yerine start()
         logger.info("✅ Bildirim servisi başlatıldı")
     except Exception as e:
         logger.warning(f"⚠️ Bildirim servisi başlatılamadı: {e}")
@@ -205,7 +228,8 @@ def main(page: ft.Page):
             return
         
         # Kullanıcı bilgileri
-        user_role = page.session.get("role", "")
+        # DÜZELTME: get("role", "") yerine get("role") kullanıldı.
+        user_role = page.session.get("role")
         
         # Sayfa görünümlerini oluştur
         try:
@@ -242,46 +266,42 @@ def main(page: ft.Page):
                 if db.is_module_active("module_chat"):
                     view = ChatPage(page, db).view()
                 else:
-                    view = _module_disabled_view("Mesajlaşma")
+                    view = _module_disabled_view(page, "Mesajlaşma")
             
             elif route == "/ai_assistant":
                 if db.is_module_active("module_ai"):
                     view = AIAssistantPage(page, db).view()
                 else:
-                    view = _module_disabled_view("AI Asistan")
+                    view = _module_disabled_view(page, "AI Asistan")
             
             elif route == "/medical_news":
-                if db.is_module_active("module_ai"):
+                if db.is_module_active("module_ai"): 
                     view = MedicalNewsPage(page, db).view()
                 else:
-                    view = _module_disabled_view("Tıbbi Bülten")
+                    view = _module_disabled_view(page, "Tıbbi Bülten")
             
             elif route == "/settings":
                 view = SettingsPage(page, db).view()
             
             elif route == "/backup":
-                # Gizli özellik - Sadece admin
                 if user_role == "admin":
                     view = BackupPage(page, db).view()
                 else:
-                    view = _access_denied_view()
+                    view = _access_denied_view(page)
             
             elif route == "/audit_logs":
-                # Gizli özellik - Sadece admin
                 if user_role == "admin":
                     view = AuditLogsPage(page, db).view()
                 else:
-                    view = _access_denied_view()
+                    view = _access_denied_view(page)
             
             elif route == "/statistics":
-                # Gizli özellik - Sadece admin
                 if user_role == "admin":
                     view = StatisticsPage(page, db).view()
                 else:
-                    view = _access_denied_view()
+                    view = _access_denied_view(page)
             
             else:
-                # Varsayılan: Ana sayfaya yönlendir
                 page.go("/doctor_home")
                 return
             
@@ -296,95 +316,8 @@ def main(page: ft.Page):
             
         except Exception as e:
             logger.error(f"Routing hatası - {route}: {e}")
-            page.views.append(_error_view(str(e)))
+            page.views.append(_error_view(page, str(e)))
             page.update()
-    
-    def _module_disabled_view(module_name: str):
-        """Modül kapalı görünümü"""
-        return ft.View(
-            "/module_disabled",
-            controls=[
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(ft.Icons.BLOCK, size=100, color="orange"),
-                        ft.Text(
-                            f"{module_name} Modülü Kapalı",
-                            size=24,
-                            weight="bold"
-                        ),
-                        ft.Text(
-                            "Bu özelliği kullanmak için Ayarlar > Modüller bölümünden etkinleştirin.",
-                            size=14,
-                            color="grey"
-                        ),
-                        ft.Container(height=20),
-                        ft.ElevatedButton(
-                            "Ayarlara Git",
-                            icon=ft.Icons.SETTINGS,
-                            on_click=lambda _: page.go("/settings")
-                        )
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.alignment.center,
-                    expand=True
-                )
-            ]
-        )
-    
-    def _access_denied_view():
-        """Erişim engellendi görünümü"""
-        return ft.View(
-            "/access_denied",
-            controls=[
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(ft.Icons.LOCK, size=100, color="red"),
-                        ft.Text(
-                            "Erişim Engellendi",
-                            size=24,
-                            weight="bold",
-                            color="red"
-                        ),
-                        ft.Text(
-                            "Bu sayfayı görüntüleme yetkiniz yok.",
-                            size=14
-                        ),
-                        ft.Container(height=20),
-                        ft.ElevatedButton(
-                            "Ana Sayfaya Dön",
-                            on_click=lambda _: page.go("/doctor_home")
-                        )
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.alignment.center,
-                    expand=True
-                )
-            ]
-        )
-    
-    def _error_view(error_msg: str):
-        """Hata görünümü"""
-        return ft.View(
-            "/error",
-            controls=[
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color="red"),
-                        ft.Text(
-                            "Bir Hata Oluştu",
-                            size=24,
-                            weight="bold"
-                        ),
-                        ft.Text(error_msg, size=14, color="grey"),
-                        ft.Container(height=20),
-                        ft.ElevatedButton(
-                            "Ana Sayfaya Dön",
-                            on_click=lambda _: page.go("/doctor_home")
-                        )
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.alignment.center,
-                    expand=True
-                )
-            ]
-        )
     
     # Route değişimlerini dinle
     page.on_route_change = lambda e: route_change(e.route)
@@ -392,6 +325,61 @@ def main(page: ft.Page):
     # İlk sayfa: Login
     page.go("/login")
 
+# --- Yardımcı Görünümler ---
+
+def _module_disabled_view(page, module_name: str):
+    return ft.View(
+        "/module_disabled",
+        controls=[
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.BLOCK, size=100, color="orange"),
+                    ft.Text(f"{module_name} Modülü Kapalı", size=24, weight="bold"),
+                    ft.Text("Bu özelliği kullanmak için Ayarlar > Modüller bölümünden etkinleştirin.", size=14, color="grey"),
+                    ft.Container(height=20),
+                    ft.ElevatedButton("Ayarlara Git", icon=ft.Icons.SETTINGS, on_click=lambda _: page.go("/settings"))
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                expand=True
+            )
+        ]
+    )
+
+def _access_denied_view(page):
+    return ft.View(
+        "/access_denied",
+        controls=[
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.LOCK, size=100, color="red"),
+                    ft.Text("Erişim Engellendi", size=24, weight="bold", color="red"),
+                    ft.Text("Bu sayfayı görüntüleme yetkiniz yok.", size=14),
+                    ft.Container(height=20),
+                    ft.ElevatedButton("Ana Sayfaya Dön", on_click=lambda _: page.go("/doctor_home"))
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                expand=True
+            )
+        ]
+    )
+
+def _error_view(page, error_msg: str):
+    return ft.View(
+        "/error",
+        controls=[
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color="red"),
+                    ft.Text("Bir Hata Oluştu", size=24, weight="bold"),
+                    ft.Text(error_msg, size=14, color="grey"),
+                    ft.Container(height=20),
+                    ft.ElevatedButton("Ana Sayfaya Dön", on_click=lambda _: page.go("/doctor_home"))
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                expand=True
+            )
+        ]
+    )
 
 if __name__ == "__main__":
     try:

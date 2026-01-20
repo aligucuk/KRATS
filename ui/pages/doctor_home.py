@@ -9,6 +9,7 @@ from database.db_manager import DatabaseManager
 from utils.logger import app_logger
 
 
+
 class DoctorHomePage:
     def __init__(self, page: ft.Page, db: DatabaseManager):
         self.page = page

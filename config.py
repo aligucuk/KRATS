@@ -43,9 +43,9 @@ class Settings:
     PASSWORD_SALT_ROUNDS: int = int(os.getenv("PASSWORD_SALT_ROUNDS", "12"))
     
     # License
-     LICENSE_SECRET_KEY: str = os.getenv(
+    LICENSE_SECRET_KEY: str = os.getenv(
         "LICENSE_SECRET_KEY",
-        "L33izrilqC9FgXtnRaae54vB62Clt6kDckDzBODoNXQ=",
+        "D8q9_zX7v2J5kL4mN1b3V0c6xR9wQ8yP5tZ2hF1gJ4k=",
     )
     LICENSE_VALIDATION_URL: str = os.getenv("LICENSE_VALIDATION_URL", "")
     HARDWARE_ID_SALT: str = os.getenv("HARDWARE_ID_SALT", "")

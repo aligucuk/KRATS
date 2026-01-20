@@ -12,6 +12,9 @@ from config import settings
 from utils.logger import get_logger
 from utils.exceptions import DatabaseException
 from utils.security_manager import SecurityManager
+
+# BU SATIRI EKLEYİN: Global security_manager nesnesi oluşturuluyor
+security_manager = SecurityManager()
 from utils.encryption_manager import encryption_manager
 from .models import (
     Base, User, Patient, Appointment, Transaction, Product,
@@ -158,31 +161,33 @@ class DatabaseManager:
     # ==================== USER MANAGEMENT ====================
     
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
-        """Authenticate user credentials
-        
-        Args:
-            username: Username
-            password: Plain text password
-            
-        Returns:
-            User object if authenticated, None otherwise
-        """
+        """Authenticate user credentials"""
         try:
+            # Session context'i içinde işlem yapıyoruz
             with self.get_session() as session:
                 user = session.query(User).filter_by(
                     username=username,
                     is_active=True
                 ).first()
                 
+                # Şifre kontrolü (Global security_manager kullanıyoruz)
                 if user and security_manager.verify_password(password, user.password):
-                    # Update last login
+                    # Son girişi güncelle
                     user.last_login = datetime.now()
+                    
+                    # Değişikliği kaydet (Bu işlem nesneyi 'expire' eder)
                     session.commit()
                     
-                    # Log successful login
-                    self.add_audit_log(user.id, "LOGIN", f"User {username} logged in")
+                    # KRİTİK DÜZELTME BURADA:
+                    # 1. Verileri tazele (Refresh)
+                    session.refresh(user)
+                    # 2. Nesneyi session'dan ayır (Expunge). 
+                    # Artık veritabanı bağlantısı kapansa bile bu nesne okunabilir.
+                    session.expunge(user)
                     
+                    self.add_audit_log(user.id, "LOGIN", f"User {username} logged in")
                     logger.info(f"User authenticated: {username}")
+                    
                     return user
                 else:
                     logger.warning(f"Authentication failed for user: {username}")
@@ -191,7 +196,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Authentication error: {e}")
             return None
-    
+        
     def create_user(
         self, username: str, password: str, full_name: str,
         role: str, commission_rate: int = 0, specialty: str = "Genel"
