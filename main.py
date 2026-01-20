@@ -7,7 +7,6 @@ from database.db_manager import DatabaseManager
 from utils.notification_service import NotificationService
 from utils.app_layout import AppLayout
 from utils.config_manager import get_app_config
-# 👇 LİSANS VE GÜVENLİK İMPORTLARI EKLENDİ
 from utils.license_manager import LicenseManager
 from utils.system_id import get_device_fingerprint
 
@@ -35,7 +34,6 @@ def start_3d_server():
     import socket
     
     def find_free_port(start=8000, end=8100):
-        """Boş port bul"""
         for port in range(start, end):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -78,16 +76,16 @@ def main(page: ft.Page):
     # Bakım Modu Kontrolü
     if config.get("maintenance_mode") == True:
         page.title = "Sistem Bakımda"
-        page.window_width, page.window_height = 400, 400
+        page.window.width, page.window.height = 400, 400
         page.add(ft.Column([
             ft.Icon(ft.icons.WARNING, size=50, color="orange"),
             ft.Text("Sistem Bakımda", size=20, weight="bold"),
             ft.Text(config.get("maintenance_message", "Güncelleme yapılıyor."))
-        ], alignment="center"))
+        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER))
         return
 
     # -----------------------------------------------------------
-    # 2. LİSANS KONTROLÜ (KAPI GÖREVLİSİ) 🛑
+    # 2. LİSANS KONTROLÜ
     # -----------------------------------------------------------
     lic_manager = LicenseManager()
     saved_key = ""
@@ -99,7 +97,7 @@ def main(page: ft.Page):
 
     if not is_valid:
         page.title = "Lisans Aktivasyonu"
-        page.window_width, page.window_height = 500, 600
+        page.window.width, page.window.height = 500, 600
         hwid = get_device_fingerprint()
         
         def activate(e):
@@ -115,23 +113,19 @@ def main(page: ft.Page):
                 page.snack_bar.open = True
                 page.update()
                 time.sleep(2)
-                page.window_destroy()
+                page.window.destroy()
             else:
                 lbl_error.value = f"❌ Hata: {msg}"
                 lbl_error.update()
 
-        txt_key = ft.TextField(
-            label="Lisans Anahtarı", 
-            text_align="center",
-            width=350
-        )
+        txt_key = ft.TextField(label="Lisans Anahtarı", text_align=ft.TextAlign.CENTER, width=350)
         lbl_error = ft.Text("", color="red")
         
         page.add(ft.Container(
             content=ft.Column([
                 ft.Icon(ft.icons.LOCK_CLOCK, size=80, color="red"),
                 ft.Text("LİSANS BULUNAMADI", size=24, weight="bold"),
-                ft.Text(f"Cihaz ID (Bunu satıcıya iletin):", color="grey"),
+                ft.Text("Cihaz ID (Bunu satıcıya iletin):", color="grey"),
                 ft.Container(
                     content=ft.Text(hwid, size=16, weight="bold", selectable=True), 
                     bgcolor="#f0f0f0", 
@@ -140,30 +134,29 @@ def main(page: ft.Page):
                 ),
                 ft.Divider(),
                 txt_key,
-                ft.ElevatedButton(
-                    "Etkinleştir", 
-                    on_click=activate, 
-                    bgcolor="blue", 
-                    color="white"
-                ),
+                ft.ElevatedButton("Etkinleştir", on_click=activate, bgcolor="blue", color="white"),
                 lbl_error
-            ], horizontal_alignment="center", spacing=20),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20),
             alignment=ft.alignment.center, 
             padding=40
         ))
-        return  # ⚠️ Programı burada durdur
-    
+        return
+
     # Lisans geçerliyse bilgileri sakla
     page.session.set("license_info", {"limit": limit, "expiry": expiry})
 
     # -----------------------------------------------------------
-    # 3. NORMAL BAŞLANGIÇ (Lisans Geçildiyse)
+    # 3. NORMAL BAŞLANGIÇ
     # -----------------------------------------------------------
     page.title = "KRATS - Klinik OS v3.0"
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.bgcolor = "#f8f9fa"
     
     db = DatabaseManager()
+    
+    # AppLayout oluştur (Sidebar için)
+    app_layout = AppLayout(page, db)
     
     try: 
         NotificationService(db).start_daemon()
@@ -176,74 +169,70 @@ def main(page: ft.Page):
         
         page.views.clear()
         
-        # Login kontrolü - Oturum yoksa login'e yönlendir
+        # Login kontrolü
         user_id = page.session.get("user_id")
         
-        if route != "/login" and not user_id:
-            print("⚠️  Oturum yok, login'e yönlendiriliyor")
-            page.views.append(LoginPage(page, db).view())
-            page.update()
-            return
-        
-        # Login sayfası
-        if route == "/login":
+        # Login sayfası - Sidebar YOK
+        if route == "/login" or (route != "/login" and not user_id):
             print("📄 Login sayfası yükleniyor")
             page.views.append(LoginPage(page, db).view())
             page.update()
             return
         
-        # Oturum varsa sayfa yönlendirmeleri
+        # Oturum varsa sayfa yönlendirmeleri - Sidebar VAR
         print(f"✅ Oturum aktif (User ID: {user_id}), sayfa yükleniyor: {route}")
         
         try:
-            view = None
+            content = None
             
             if route == "/doctor_home":
-                view = DoctorHomePage(page, db, "admin").view()
+                content = DoctorHomePage(page, db, "admin").view().controls[0]
             elif route == "/patient_list":
-                view = PatientListPage(page, db).view()
+                content = PatientListPage(page, db).view().controls[0]
             elif route == "/appointments":
-                view = AppointmentsPage(page, db).view()
+                content = AppointmentsPage(page, db).view().controls[0]
             elif route == "/settings":
-                view = SettingsPage(page, db).view()
+                content = SettingsPage(page, db).view().controls[0]
             elif route == "/inventory":
-                view = InventoryPage(page, db).view()
+                content = InventoryPage(page, db).view().controls[0]
             elif route == "/add_patient":
-                view = AddPatientPage(page, db).view()
+                content = AddPatientPage(page, db).view().controls[0]
             elif route == "/crm":
-                view = CRMPage(page, db).view()
+                content = CRMPage(page, db).view().controls[0]
             elif route == "/finance":
-                view = FinancePage(page, db).view()
+                content = FinancePage(page, db).view().controls[0]
             elif route == "/chat":
-                view = ChatPage(page, db).view()
+                content = ChatPage(page, db).view().controls[0]
             elif route == "/waiting_room":
-                view = WaitingRoomPage(page, db).view()
+                content = WaitingRoomPage(page, db).view().controls[0]
             elif route == "/tv_display":
-                view = TVDisplayPage(page, db).view()
+                # TV Display tam ekran olmalı, sidebar olmadan
+                page.views.append(TVDisplayPage(page, db).view())
+                page.update()
+                return
             elif route == "/ai_assistant":
-                view = AIAssistantPage(page, db).view()
+                content = AIAssistantPage(page, db).view().controls[0]
             elif route == "/medical_news":
-                view = MedicalNewsPage(page, db).view()
+                content = MedicalNewsPage(page, db).view().controls[0]
             elif route.startswith("/patient_detail/"):
-                # Hasta detay sayfası için ID'yi al
                 patient_id = route.split("/")[-1]
-                view = PatientDetailPage(page, db, int(patient_id)).view()
+                content = PatientDetailPage(page, db, int(patient_id)).view().controls[0]
             elif route.startswith("/medical_detail/"):
-                # Tıbbi kayıt detay sayfası için ID'yi al
                 record_id = route.split("/")[-1]
-                view = MedicalDetailPage(page, db, int(record_id)).view()
+                content = MedicalDetailPage(page, db, int(record_id)).view().controls[0]
             else:
                 # Bilinmeyen rota - ana sayfaya yönlendir
                 print(f"⚠️  Bilinmeyen rota: {route}, ana sayfaya yönlendiriliyor")
-                view = DoctorHomePage(page, db, "admin").view()
+                content = DoctorHomePage(page, db, "admin").view().controls[0]
             
-            # View'ı ekle
-            if view:
+            # Sidebar ile birlikte view oluştur
+            if content:
+                view = app_layout.get_view(route, content)
                 page.views.append(view)
                 page.update()
                 print(f"✅ Sayfa yüklendi: {route}")
             else:
-                print(f"❌ View oluşturulamadı: {route}")
+                print(f"❌ Content oluşturulamadı: {route}")
                 
         except Exception as e:
             print(f"❌ Sayfa yükleme hatası ({route}): {e}")
@@ -257,6 +246,15 @@ def main(page: ft.Page):
 
     # Route değişikliklerini dinle
     page.on_route_change = lambda e: route_change(e.route)
+    
+    # Geri tuşu desteği
+    def view_pop(e):
+        if len(page.views) > 1:
+            page.views.pop()
+            top_view = page.views[-1]
+            page.go(top_view.route)
+    
+    page.on_view_pop = view_pop
     
     # İlk başlatma - login'e git
     print("🚀 Uygulama başlatılıyor...")

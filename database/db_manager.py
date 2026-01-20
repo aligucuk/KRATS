@@ -1,31 +1,36 @@
 import sqlite3
 import datetime
 import hashlib
+
 # Güvenlik modülü yoksa basit bir dummy sınıf kullanır, varsa onu import eder.
 try:
     from utils.security import SecurityManager
 except ImportError:
     class SecurityManager:
-        def hash_password(self, pwd): return hashlib.sha256(pwd.encode()).hexdigest()
-        def verify_password(self, stored, provided): return stored == self.hash_password(provided)
-        def encrypt_data(self, data): return data # Şifreleme yoksa düz döner
-        def decrypt_data(self, data): return data
+        def hash_password(self, pwd): 
+            return hashlib.sha256(pwd.encode()).hexdigest()
+        def verify_password(self, stored, provided): 
+            return stored == self.hash_password(provided)
+        def encrypt_data(self, data): 
+            return data
+        def decrypt_data(self, data): 
+            return data
+
 
 class DatabaseManager:
     def __init__(self, db_name="krats.db"):
         self.db_name = db_name
-        self.security = SecurityManager() # Güvenlik yöneticisi başlatıldı
+        self.security = SecurityManager()
         self.conn = None
         self.connect()
         self.init_db()
-        self._migrate_db() # Yeni sütunları güvenle ekler
+        self._migrate_db()
 
     def connect(self):
         self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
         self.cursor = self.conn.cursor()
 
     def _get_conn(self):
-        # Her işlem için taze bağlantı (Thread-safe olması için)
         return sqlite3.connect(self.db_name, check_same_thread=False)
 
     def init_db(self):
@@ -34,7 +39,7 @@ class DatabaseManager:
         # 1. AYARLAR
         self.cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
         
-        # 2. KULLANICILAR (Specialty Sütunu ile)
+        # 2. KULLANICILAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,17 +55,29 @@ class DatabaseManager:
         # 3. HASTALAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS patients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, tc_no TEXT UNIQUE, full_name TEXT,
-                phone TEXT, birth_date TEXT, gender TEXT, address TEXT,
-                status TEXT DEFAULT 'Yeni', source TEXT DEFAULT 'Diğer', email TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                tc_no TEXT UNIQUE, 
+                full_name TEXT,
+                phone TEXT, 
+                birth_date TEXT, 
+                gender TEXT, 
+                address TEXT,
+                status TEXT DEFAULT 'Yeni', 
+                source TEXT DEFAULT 'Diğer', 
+                email TEXT
             )
         """)
 
         # 4. RANDEVULAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS appointments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER, doctor_id INTEGER,
-                appointment_date TEXT, status TEXT, notes TEXT, reminder_sent INTEGER DEFAULT 0,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                patient_id INTEGER, 
+                doctor_id INTEGER,
+                appointment_date TEXT, 
+                status TEXT, 
+                notes TEXT, 
+                reminder_sent INTEGER DEFAULT 0,
                 active_user_id INTEGER,
                 FOREIGN KEY(patient_id) REFERENCES patients(id)
             )
@@ -69,54 +86,93 @@ class DatabaseManager:
         # 5. FİNANS
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, category TEXT,
-                amount REAL, description TEXT, date TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                type TEXT, 
+                category TEXT,
+                amount REAL, 
+                description TEXT, 
+                date TEXT
             )
         """)
         
         # 6. STOK
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, unit TEXT,
-                quantity INTEGER, threshold INTEGER DEFAULT 10
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                name TEXT, 
+                unit TEXT,
+                quantity INTEGER, 
+                threshold INTEGER DEFAULT 10
             )
         """)
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS inventory_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, user_id INTEGER,
-                patient_id INTEGER, quantity INTEGER, date TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                product_id INTEGER, 
+                user_id INTEGER,
+                patient_id INTEGER, 
+                quantity INTEGER, 
+                date TEXT
             )
         """)
         
         # 7. MESAJLAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, receiver_id INTEGER,
-                message TEXT, timestamp TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                sender_id INTEGER, 
+                receiver_id INTEGER,
+                message TEXT, 
+                timestamp TEXT
             )
         """)
         
         # 8. DOSYALAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS patient_files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER, 
-                file_name TEXT, file_path TEXT, file_type TEXT, upload_date TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                patient_id INTEGER, 
+                file_name TEXT, 
+                file_path TEXT, 
+                file_type TEXT, 
+                upload_date TEXT
             )
         """)
         
         # 9. TIBBİ KAYITLAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS medical_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER, doctor_id INTEGER,
-                anamnez TEXT, diagnosis TEXT, treatment TEXT, prescription TEXT, date TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                patient_id INTEGER, 
+                doctor_id INTEGER,
+                anamnez TEXT, 
+                diagnosis TEXT, 
+                treatment TEXT, 
+                prescription TEXT, 
+                date TEXT
             )
         """)
         
         # 10. LOGLAR
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action_type TEXT,
-                description TEXT, timestamp TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                user_id INTEGER, 
+                action_type TEXT,
+                description TEXT, 
+                timestamp TEXT
+            )
+        """)
+
+        # 11. KULLANICI NOTLARI (calendar_page.py için)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                date TEXT,
+                text TEXT,
+                is_shared INTEGER DEFAULT 0,
+                sender_name TEXT
             )
         """)
 
@@ -124,30 +180,52 @@ class DatabaseManager:
         self.cursor.execute("SELECT * FROM users WHERE username = 'admin'")
         if not self.cursor.fetchone():
             hashed_pw = self.security.hash_password("admin")
-            self.cursor.execute("INSERT INTO users (username, password, full_name, role, specialty) VALUES (?, ?, ?, ?, ?)",
-                           ("admin", hashed_pw, "Sistem Yöneticisi", "admin", "Genel"))
+            self.cursor.execute(
+                "INSERT INTO users (username, password, full_name, role, specialty) VALUES (?, ?, ?, ?, ?)",
+                ("admin", hashed_pw, "Sistem Yöneticisi", "admin", "Genel")
+            )
 
         self.conn.commit()
-        # Bağlantıyı açık tutmuyoruz, metotlar kendi açacak
-        # self.conn.close() 
 
     def _migrate_db(self):
-        """Veritabanı yapısını günceller (Eski DB'ye yeni sütun ekleme)"""
+        """Veritabanı yapısını günceller"""
         try:
             conn = self._get_conn()
             cursor = conn.cursor()
+            
             # Users tablosuna specialty ekle
             try:
                 cursor.execute("ALTER TABLE users ADD COLUMN specialty TEXT DEFAULT 'Genel'")
                 conn.commit()
-            except: pass # Zaten varsa hata verir, geç
+            except: 
+                pass
+            
+            # user_notes tablosu oluştur
+            try:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        date TEXT,
+                        text TEXT,
+                        is_shared INTEGER DEFAULT 0,
+                        sender_name TEXT
+                    )
+                """)
+                conn.commit()
+            except:
+                pass
+            
             conn.close()
         except Exception as e:
             print(f"Migration Error: {e}")
 
     # --- HELPER METODLAR ---
-    def _encrypt(self, text): return self.security.encrypt_data(str(text)) if text else ""
-    def _decrypt(self, text): return self.security.decrypt_data(str(text)) if text else ""
+    def _encrypt(self, text): 
+        return self.security.encrypt_data(str(text)) if text else ""
+    
+    def _decrypt(self, text): 
+        return self.security.decrypt_data(str(text)) if text else ""
 
     def _fetch_all(self, sql, params=()):
         conn = self._get_conn()
@@ -196,12 +274,20 @@ class DatabaseManager:
             lm = LicenseManager()
             is_valid, msg, limit, expiry = lm.validate_license(license_key)
             return {
-                "valid": is_valid, "message": msg if license_key else "Lisans Yok.",
-                "limit": limit if is_valid else 0, "current": current_user_count,
+                "valid": is_valid, 
+                "message": msg if license_key else "Lisans Yok.",
+                "limit": limit if is_valid else 0, 
+                "current": current_user_count,
                 "expiry": expiry if expiry else "-"
             }
         except:
-            return {"valid": True, "message": "Lisans Modülü Yok", "limit": 99, "current": 0, "expiry": "Sınırsız"}
+            return {
+                "valid": True, 
+                "message": "Lisans Modülü Yok", 
+                "limit": 99, 
+                "current": 0, 
+                "expiry": "Sınırsız"
+            }
 
     # --- KULLANICI İŞLEMLERİ ---
     def get_user_count(self):
@@ -214,29 +300,33 @@ class DatabaseManager:
         cursor.execute("SELECT * FROM users WHERE username=?", (username,))
         user = cursor.fetchone()
         conn.close()
-        # user[2] password sütunu
-        if user and self.security.verify_password(user[2], password): return user
+        if user and self.security.verify_password(user[2], password): 
+            return user
         return None
 
     def add_user_secure(self, username, password, full_name, role, commission_rate=0, specialty="Genel"):
-        # Lisans kontrolü
         status = self.get_system_status()
-        if status["limit"] > 0 and status["current"] >= status["limit"]: return False, "Kota Dolu!"
+        if status["limit"] > 0 and status["current"] >= status["limit"]: 
+            return False, "Kota Dolu!"
         
         check = self._fetch_all("SELECT id FROM users WHERE username=?", (username,))
-        if check: return False, "Kullanıcı adı alınmış."
+        if check: 
+            return False, "Kullanıcı adı alınmış."
 
         try:
             hashed = self.security.hash_password(password)
-            self._execute("INSERT INTO users (username, password, full_name, role, commission_rate, specialty) VALUES (?, ?, ?, ?, ?, ?)", 
-                          (username, hashed, full_name, role, commission_rate, specialty))
+            self._execute(
+                "INSERT INTO users (username, password, full_name, role, commission_rate, specialty) VALUES (?, ?, ?, ?, ?, ?)", 
+                (username, hashed, full_name, role, commission_rate, specialty)
+            )
             return True, "Kayıt Başarılı."
-        except Exception as e: return False, str(e)
+        except Exception as e: 
+            return False, str(e)
 
-    def get_all_users(self): return self._fetch_all("SELECT id, username, full_name, role, commission_rate, specialty FROM users")
+    def get_all_users(self): 
+        return self._fetch_all("SELECT id, username, full_name, role, commission_rate, specialty FROM users")
     
     def get_users_except(self, uid): 
-        # Chat sayfası için
         return self._fetch_all("SELECT id, username, full_name, role FROM users WHERE id != ?", (uid,))
 
     def get_user_specialty(self, user_id):
@@ -260,17 +350,19 @@ class DatabaseManager:
         decrypted = []
         for r in rows:
             try:
-                # r yapısı: id, tc, name, phone, bdate, gender, address, status, source, email
                 decrypted.append((
                     r[0], self._decrypt(r[1]), self._decrypt(r[2]), self._decrypt(r[3]), 
                     r[4], r[5], self._decrypt(r[6]), r[7], r[8], r[9]
                 ))
-            except: decrypted.append(r)
+            except: 
+                decrypted.append(r)
         return decrypted
 
     def add_patient(self, tc, name, phone, bdate, gender, address, email=None, source="Diğer"):
-        return self._execute("INSERT INTO patients (tc_no, full_name, phone, birth_date, gender, address, email, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Yeni')", 
-                             (self._encrypt(tc), self._encrypt(name), self._encrypt(phone), bdate, gender, self._encrypt(address), email, source))
+        return self._execute(
+            "INSERT INTO patients (tc_no, full_name, phone, birth_date, gender, address, email, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Yeni')", 
+            (self._encrypt(tc), self._encrypt(name), self._encrypt(phone), bdate, gender, self._encrypt(address), email, source)
+        )
 
     def get_patient_by_id(self, pid):
         rows = self._fetch_all("SELECT * FROM patients WHERE id=?", (pid,))
@@ -279,13 +371,18 @@ class DatabaseManager:
             return (r[0], self._decrypt(r[1]), self._decrypt(r[2]), self._decrypt(r[3]), r[4], r[5], self._decrypt(r[6]), r[7], r[8], r[9])
         return None
         
-    def archive_patient(self, pid): return self._execute("UPDATE patients SET status = 'Arşiv' WHERE id = ?", (pid,))
-    def restore_patient(self, pid): return self._execute("UPDATE patients SET status = 'Yeni' WHERE id = ?", (pid,))
+    def archive_patient(self, pid): 
+        return self._execute("UPDATE patients SET status = 'Arşiv' WHERE id = ?", (pid,))
+    
+    def restore_patient(self, pid): 
+        return self._execute("UPDATE patients SET status = 'Yeni' WHERE id = ?", (pid,))
 
     # --- RANDEVU İŞLEMLERİ ---
     def add_appointment(self, patient_id, doctor_id, date_str, notes, active_user_id=None):
-        return self._execute("INSERT INTO appointments (patient_id, doctor_id, appointment_date, status, notes, active_user_id) VALUES (?, ?, ?, ?, ?, ?)",
-                             (patient_id, doctor_id, date_str, "Bekliyor", self._encrypt(notes), active_user_id))
+        return self._execute(
+            "INSERT INTO appointments (patient_id, doctor_id, appointment_date, status, notes, active_user_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (patient_id, doctor_id, date_str, "Bekliyor", self._encrypt(notes), active_user_id)
+        )
 
     def get_todays_appointments(self):
         today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -295,48 +392,196 @@ class DatabaseManager:
             WHERE a.appointment_date LIKE ? ORDER BY a.appointment_date ASC
         """, (f"{today}%",))
         final = []
-        for r in rows: final.append((r[0], self._decrypt(r[1]), r[2], r[3], self._decrypt(r[4])))
+        for r in rows: 
+            final.append((r[0], self._decrypt(r[1]), r[2], r[3], self._decrypt(r[4])))
         return final
+
+    # ✅ YENİ EKLENEN METODLAR
+    
+    def get_appointments_by_range(self, start_date, end_date):
+        """Tarih aralığındaki randevuları getirir (calendar.py için)"""
+        return self._fetch_all("""
+            SELECT appointment_date, status FROM appointments 
+            WHERE date(appointment_date) BETWEEN date(?) AND date(?)
+        """, (start_date, end_date))
+
+    def get_appointments_by_doctor(self, doctor_id):
+        """Doktora ait randevuları getirir (calendar_page.py için)"""
+        rows = self._fetch_all("""
+            SELECT a.id, p.full_name, a.appointment_date, a.status, a.notes, a.patient_id
+            FROM appointments a JOIN patients p ON a.patient_id = p.id
+            WHERE a.doctor_id = ? ORDER BY a.appointment_date DESC
+        """, (doctor_id,))
+        final = []
+        for r in rows:
+            try:
+                final.append((r[0], self._decrypt(r[1]), r[2], r[3], self._decrypt(r[4]), r[5]))
+            except:
+                final.append(r)
+        return final
+
+    def get_tomorrow_appointments(self):
+        """Yarınki randevuları getirir (whatsapp_bot.py için)"""
+        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        rows = self._fetch_all("""
+            SELECT a.id, p.full_name, a.appointment_date, a.status, a.notes, p.phone
+            FROM appointments a JOIN patients p ON a.patient_id = p.id
+            WHERE a.appointment_date LIKE ? AND a.status = 'Bekliyor'
+        """, (f"{tomorrow}%",))
+        final = []
+        for r in rows:
+            try:
+                final.append((r[0], self._decrypt(r[1]), r[2], r[3], self._decrypt(r[4]), self._decrypt(r[5])))
+            except:
+                final.append(r)
+        return final
+
+    def auto_update_status(self):
+        """Geçmiş randevuları otomatik günceller (dashboard.py için)"""
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        return self._execute("""
+            UPDATE appointments SET status = 'Tamamlandı' 
+            WHERE appointment_date < ? AND status = 'Bekliyor'
+        """, (now,))
+
+    # --- NOT METODLARI (calendar_page.py için) ---
+    def get_notes_by_date(self, user_id, date_str):
+        """Belirli tarihteki notları getirir"""
+        try:
+            return self._fetch_all("""
+                SELECT text, is_shared, sender_name FROM user_notes 
+                WHERE user_id = ? AND date = ?
+            """, (user_id, date_str))
+        except:
+            return []
+
+    def add_note(self, user_id, date_str, text, is_shared=False):
+        """Not ekler"""
+        return self._execute("""
+            INSERT INTO user_notes (user_id, date, text, is_shared) 
+            VALUES (?, ?, ?, ?)
+        """, (user_id, date_str, text, 1 if is_shared else 0))
+
+    def add_shared_note(self, sender_name, target_id, date_str, text):
+        """Paylaşımlı not ekler"""
+        return self._execute("""
+            INSERT INTO user_notes (user_id, date, text, is_shared, sender_name) 
+            VALUES (?, ?, ?, 1, ?)
+        """, (target_id, date_str, text, sender_name))
+
+    # --- İSTATİSTİK METODLARI ---
+    def get_dashboard_stats(self):
+        """Dashboard istatistikleri (dashboard.py için)"""
+        return self._fetch_all("""
+            SELECT status, COUNT(*) FROM appointments 
+            GROUP BY status
+        """)
+
+    def get_monthly_income_stats(self):
+        """Aylık gelir istatistikleri (stats.py için)"""
+        return self._fetch_all("""
+            SELECT strftime('%Y-%m', date) as month, SUM(amount) 
+            FROM transactions WHERE type='Gelir'
+            GROUP BY month ORDER BY month DESC LIMIT 6
+        """)
 
     # --- BİLDİRİM & LOG ---
     def get_pending_reminders(self):
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        rows = self._fetch_all("SELECT a.id, p.full_name, p.phone, p.email, a.appointment_date FROM appointments a JOIN patients p ON a.patient_id = p.id WHERE a.appointment_date LIKE ? AND a.reminder_sent = 0", (f"{tomorrow}%",))
+        rows = self._fetch_all("""
+            SELECT a.id, p.full_name, p.phone, p.email, a.appointment_date 
+            FROM appointments a JOIN patients p ON a.patient_id = p.id 
+            WHERE a.appointment_date LIKE ? AND a.reminder_sent = 0
+        """, (f"{tomorrow}%",))
         final = []
-        for r in rows: final.append((r[0], self._decrypt(r[1]), self._decrypt(r[2]), r[3], r[4]))
+        for r in rows: 
+            final.append((r[0], self._decrypt(r[1]), self._decrypt(r[2]), r[3], r[4]))
         return final
     
-    def mark_reminder_sent(self, app_id): return self._execute("UPDATE appointments SET reminder_sent = 1 WHERE id = ?", (app_id,))
+    def mark_reminder_sent(self, app_id): 
+        return self._execute("UPDATE appointments SET reminder_sent = 1 WHERE id = ?", (app_id,))
+
+    def log_action(self, user, action_type, description):
+        """Audit log kaydı (sms_manager.py için)"""
+        return self._execute("""
+            INSERT INTO audit_logs (user_id, action_type, description, timestamp) 
+            VALUES (?, ?, ?, ?)
+        """, (user, action_type, description, str(datetime.datetime.now())))
 
     # --- FİNANS & STOK ---
     def add_transaction(self, t_type, cat, amount, desc, date):
-        return self._execute("INSERT INTO transactions (type, category, amount, description, date) VALUES (?, ?, ?, ?, ?)", (t_type, cat, amount, desc, str(date)))
-    def get_transactions(self): return self._fetch_all("SELECT * FROM transactions ORDER BY date DESC")
-    def delete_transaction(self, tid): return self._execute("DELETE FROM transactions WHERE id=?", (tid,))
+        return self._execute(
+            "INSERT INTO transactions (type, category, amount, description, date) VALUES (?, ?, ?, ?, ?)", 
+            (t_type, cat, amount, desc, str(date))
+        )
     
-    def get_inventory(self): return self._fetch_all("SELECT * FROM products")
-    def add_product(self, name, unit, qty, threshold): return self._execute("INSERT INTO products (name, unit, quantity, threshold) VALUES (?, ?, ?, ?)", (name, unit, qty, threshold))
-    def delete_product(self, pid): return self._execute("DELETE FROM products WHERE id=?", (pid,))
+    def get_transactions(self): 
+        return self._fetch_all("SELECT * FROM transactions ORDER BY date DESC")
+    
+    def delete_transaction(self, tid): 
+        return self._execute("DELETE FROM transactions WHERE id=?", (tid,))
+    
+    def get_inventory(self): 
+        return self._fetch_all("SELECT * FROM products")
+    
+    def add_product(self, name, unit, qty, threshold): 
+        return self._execute(
+            "INSERT INTO products (name, unit, quantity, threshold) VALUES (?, ?, ?, ?)", 
+            (name, unit, qty, threshold)
+        )
+    
+    def delete_product(self, pid): 
+        return self._execute("DELETE FROM products WHERE id=?", (pid,))
     
     # --- SOHBET ---
     def send_message(self, sender, receiver, msg):
-        return self._execute("INSERT INTO messages (sender_id, receiver_id, message, timestamp) VALUES (?, ?, ?, ?)", (sender, receiver, msg, str(datetime.datetime.now())))
+        return self._execute(
+            "INSERT INTO messages (sender_id, receiver_id, message, timestamp) VALUES (?, ?, ?, ?)", 
+            (sender, receiver, msg, str(datetime.datetime.now()))
+        )
+    
     def get_chat_history(self, u1, u2):
-        return self._fetch_all("SELECT sender_id, message, timestamp FROM messages WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) ORDER BY timestamp ASC", (u1, u2, u2, u1))
+        return self._fetch_all("""
+            SELECT sender_id, message, timestamp FROM messages 
+            WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) 
+            ORDER BY timestamp ASC
+        """, (u1, u2, u2, u1))
     
     # --- MEDİKAL KAYITLAR ---
     def add_patient_file(self, pid, name, path, ftype):
-        return self._execute("INSERT INTO patient_files (patient_id, file_name, file_path, file_type, upload_date) VALUES (?, ?, ?, ?, ?)", (pid, name, path, ftype, str(datetime.datetime.now())))
-    def get_patient_files(self, pid): return self._fetch_all("SELECT * FROM patient_files WHERE patient_id=?", (pid,))
+        return self._execute(
+            "INSERT INTO patient_files (patient_id, file_name, file_path, file_type, upload_date) VALUES (?, ?, ?, ?, ?)", 
+            (pid, name, path, ftype, str(datetime.datetime.now()))
+        )
+    
+    def get_patient_files(self, pid): 
+        return self._fetch_all("SELECT * FROM patient_files WHERE patient_id=?", (pid,))
     
     def add_medical_record(self, pid, did, anamnez, diag, treat, presc, *args):
-        return self._execute("INSERT INTO medical_records (patient_id, doctor_id, anamnez, diagnosis, treatment, prescription, date) VALUES (?, ?, ?, ?, ?, ?, ?)", (pid, did, anamnez, diag, treat, presc, str(datetime.datetime.now())))
+        return self._execute(
+            "INSERT INTO medical_records (patient_id, doctor_id, anamnez, diagnosis, treatment, prescription, date) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+            (pid, did, anamnez, diag, treat, presc, str(datetime.datetime.now()))
+        )
     
     def get_patient_sources(self):
-        # CRM Grafiği İçin
+        """CRM Grafiği İçin"""
         rows = self.get_active_patients()
         sources = {}
         for p in rows:
-            src = p[8] if len(p)>8 else "Diğer"
+            src = p[8] if len(p) > 8 else "Diğer"
             sources[src] = sources.get(src, 0) + 1
         return list(sources.items())
+
+    def factory_reset(self):
+        """Tüm tabloları sıfırlar (reset_db.py için)"""
+        tables = [
+            "patients", "appointments", "transactions", "products", 
+            "messages", "patient_files", "medical_records", "audit_logs",
+            "inventory_logs", "user_notes"
+        ]
+        for table in tables:
+            try:
+                self._execute(f"DELETE FROM {table}")
+            except:
+                pass
+        return True
