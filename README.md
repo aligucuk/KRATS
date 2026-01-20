@@ -192,32 +192,32 @@ python main.py
 GitHub Issues: [github.com/yourrepo/krats/issues](https://github.com)
 
 ### İletişim
-- Email: support@krats.com
-- Telefon: +90 XXX XXX XX XX
+- Email: 
+- Telefon: 
 
 ## 📝 Lisans
 
 Bu yazılım ticari lisans altındadır. Kullanım için geçerli lisans anahtarı gereklidir.
 
-Lisans satın almak için: sales@krats.com
+Lisans satın almak için: 
 
 ## 🎓 Eğitim Videoları
 
-1. **Temel Kullanım** - [YouTube Link]
-2. **Randevu Yönetimi** - [YouTube Link]
-3. **AI Asistan Kullanımı** - [YouTube Link]
-4. **E-Nabız Entegrasyonu** - [YouTube Link]
+1. **Temel Kullanım** - 
+2. **Randevu Yönetimi** - 
+3. **AI Asistan Kullanımı** - 
+4. **E-Nabız Entegrasyonu** - 
 
 ## 🔄 Güncellemeler
 
-### v3.0.0 (2024-01-20)
+### v3.0.0 
 - ✨ AI asistan eklendi (GPT-4, Claude, Gemini)
 - ✨ Tıbbi bülten sistemi
 - ✨ Gelişmiş güvenlik (şifreleme)
 - ✨ Audit log sistemi
 - 🐛 100+ bug düzeltmesi
 
-### v2.5.0 (2023-12-15)
+### v2.5.0 
 - ✨ E-Nabız entegrasyonu
 - ✨ Google Calendar senkronizasyonu
 - 🐛 Performans iyileştirmeleri
@@ -231,4 +231,4 @@ Lisans satın almak için: sales@krats.com
 
 ---
 
-**© 2024 KRATS. Tüm hakları saklıdır.**
+**© 2026 KRATS. Tüm hakları saklıdır.**
