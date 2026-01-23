@@ -31,24 +31,24 @@ class EncryptionManager:
 
     def encrypt(self, plain_text: str) -> str:
         if not plain_text:
-            return ""
+            return ""  # Allow empty strings for optional fields
         try:
             return self.cipher.encrypt(str(plain_text).encode()).decode()
         except Exception as exc:
             logger.error(f"Şifreleme hatası: {exc}")
-            return ""
+            raise RuntimeError(f"Encryption failed: {exc}") from exc
 
     def decrypt(self, encrypted_text: str) -> str:
         if not encrypted_text:
-            return ""
+            return ""  # Allow empty strings for optional fields
         try:
             return self.cipher.decrypt(str(encrypted_text).encode()).decode()
         except InvalidToken as exc:
             logger.error(f"Şifre çözme hatası (anahtar uyumsuz): {exc}")
-            return encrypted_text
+            raise RuntimeError(f"Decryption failed - invalid token: {exc}") from exc
         except Exception as exc:
             logger.error(f"Şifre çözme hatası: {exc}")
-            return encrypted_text
+            raise RuntimeError(f"Decryption failed: {exc}") from exc
 
 
 encryption_manager = EncryptionManager()

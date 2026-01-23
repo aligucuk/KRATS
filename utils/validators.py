@@ -3,8 +3,19 @@
 import re
 from typing import Tuple, Optional
 from datetime import datetime
-import utils.validators as external_validators
 from .logger import get_logger
+
+# Email and URL validation using simple regex patterns
+# If validators library is needed, install: pip install validators
+EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+URL_PATTERN = re.compile(
+    r'^https?://'  # http:// or https://
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+    r'localhost|'  # localhost...
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+    r'(?::\d+)?'  # optional port
+    r'(?:/?|[/?]\S+)$', re.IGNORECASE
+)
 
 logger = get_logger(__name__)
 
@@ -102,17 +113,17 @@ class Validators:
     @staticmethod
     def validate_email(email: str) -> Tuple[bool, Optional[str]]:
         """Validate email address
-        
+
         Args:
             email: Email address
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
         if not email:
             return False, "E-posta adresi boş olamaz"
-        
-        if external_validators.email(email):
+
+        if EMAIL_PATTERN.match(email.strip()):
             return True, None
         else:
             return False, "Geçersiz e-posta adresi"
@@ -175,17 +186,17 @@ class Validators:
     @staticmethod
     def validate_url(url: str) -> Tuple[bool, Optional[str]]:
         """Validate URL
-        
+
         Args:
             url: URL to validate
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
         if not url:
             return False, "URL boş olamaz"
-        
-        if external_validators.url(url):
+
+        if URL_PATTERN.match(url.strip()):
             return True, None
         else:
             return False, "Geçersiz URL"
