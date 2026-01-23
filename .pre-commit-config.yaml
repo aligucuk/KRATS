@@ -1,0 +1,91 @@
+# Pre-commit hooks for KRATS project
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Code formatting
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.10
+        exclude: ^(venv|\.venv|__pycache__|\.pytest_cache)/
+
+  # Import sorting
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+        exclude: ^(venv|\.venv|__pycache__)/
+
+  # Linting
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ["--max-line-length=127", "--extend-ignore=E203,W503"]
+        exclude: ^(venv|\.venv|__pycache__|tests)/
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: ["-r", ".", "--exclude", "./venv,./tests,./scripts"]
+        exclude: ^(venv|\.venv|tests|scripts)/
+
+  # Git hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent large files
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+      # Check for merge conflicts
+      - id: check-merge-conflict
+
+      # Check YAML files
+      - id: check-yaml
+        exclude: ^\.github/workflows/
+
+      # Check JSON files
+      - id: check-json
+
+      # Check for files with names that would conflict on case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Trim trailing whitespace
+      - id: trailing-whitespace
+        exclude: ^(\.md|\.txt)$
+
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+        exclude: ^(\.md|\.txt)$
+
+      # Check for debugger imports
+      - id: debug-statements
+
+      # Detect private keys
+      - id: detect-private-key
+
+  # Type checking (optional, can be slow)
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.8.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [types-all]
+  #       args: ["--ignore-missing-imports", "--no-strict-optional"]
+  #       exclude: ^(venv|\.venv|tests)/
+
+  # Run tests before commit (optional, can be slow)
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: pytest
+        language: system
+        pass_filenames: false
+        args: ["tests/", "-v", "--tb=short", "-x", "--maxfail=1"]
+        stages: [push]
+        # Only run on push, not on every commit

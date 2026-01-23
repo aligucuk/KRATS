@@ -64,7 +64,8 @@ class LicenseService:
             if stored_key == expected_key:
                 return True
             else:
-                logger.warning(f"Geçersiz lisans anahtarı! Beklenen: {expected_key}, Bulunan: {stored_key}")
+                # SECURITY: Don't log actual keys to avoid leaking license information
+                logger.warning("Geçersiz lisans anahtarı! Lisans doğrulanamadı.")
                 return False
                 
         except Exception as e:

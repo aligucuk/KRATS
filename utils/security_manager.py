@@ -44,7 +44,8 @@ class SecurityManager:
     
     def hash_password(self, password: str) -> str:
         """Şifreyi BCrypt ile güvenli hashler (Yavaş ve Tuzlu)"""
-        if not password: return ""
+        if not password:
+            raise ValueError("Password cannot be empty")
         try:
             # String -> Bytes
             password_bytes = password.encode('utf-8')
@@ -55,7 +56,7 @@ class SecurityManager:
             return hashed.decode('utf-8')
         except Exception as e:
             logger.error(f"Hash hatası: {e}")
-            return ""
+            raise RuntimeError(f"Password hashing failed: {e}") from e
 
     def verify_password(self, provided_password: str, stored_hash: str) -> bool:
         """Giriş şifresini doğrular"""
@@ -79,20 +80,22 @@ class SecurityManager:
 
     def encrypt_data(self, plain_text):
         """Veriyi şifreler (TC, Tel, Adres vb.)"""
-        if not plain_text: return ""
+        if not plain_text:
+            return ""  # Allow empty strings for optional fields
         try:
             # Fernet sadece bytes kabul eder
             return self.cipher.encrypt(str(plain_text).encode('utf-8')).decode('utf-8')
         except Exception as e:
             logger.error(f"Veri şifreleme hatası: {e}")
-            return ""
+            raise RuntimeError(f"Data encryption failed: {e}") from e
 
     def decrypt_data(self, encrypted_text):
         """Şifreli veriyi okur"""
-        if not encrypted_text: return ""
+        if not encrypted_text:
+            return ""  # Allow empty strings for optional fields
         try:
             return self.cipher.decrypt(str(encrypted_text).encode('utf-8')).decode('utf-8')
         except Exception as e:
-            # Şifre çözülemezse (eski anahtar vs.) logla ama programı çökertme
+            # Şifre çözülemezse (eski anahtar vs.) logla ve hata fırlat
             logger.error(f"Veri çözme hatası: {e}")
-            return str(encrypted_text)
+            raise RuntimeError(f"Data decryption failed: {e}") from e
