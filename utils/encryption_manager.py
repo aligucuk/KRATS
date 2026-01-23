@@ -38,17 +38,31 @@ class EncryptionManager:
             logger.error(f"Şifreleme hatası: {exc}")
             raise RuntimeError(f"Encryption failed: {exc}") from exc
 
-    def decrypt(self, encrypted_text: str) -> str:
+    def decrypt(self, encrypted_text: str, strict: bool = False) -> str:
+        """Decrypt encrypted text
+
+        Args:
+            encrypted_text: Encrypted text to decrypt
+            strict: If True, raise exception on error. If False (default), return empty string
+        """
         if not encrypted_text:
             return ""  # Allow empty strings for optional fields
         try:
             return self.cipher.decrypt(str(encrypted_text).encode()).decode()
         except InvalidToken as exc:
             logger.error(f"Şifre çözme hatası (anahtar uyumsuz): {exc}")
-            raise RuntimeError(f"Decryption failed - invalid token: {exc}") from exc
+            if strict:
+                raise RuntimeError(f"Decryption failed - invalid token: {exc}") from exc
+            else:
+                logger.warning("Invalid token, returning empty string for backwards compatibility")
+                return ""
         except Exception as exc:
             logger.error(f"Şifre çözme hatası: {exc}")
-            raise RuntimeError(f"Decryption failed: {exc}") from exc
+            if strict:
+                raise RuntimeError(f"Decryption failed: {exc}") from exc
+            else:
+                logger.warning("Decryption failed, returning empty string for backwards compatibility")
+                return ""
 
 
 encryption_manager = EncryptionManager()

@@ -89,13 +89,26 @@ class SecurityManager:
             logger.error(f"Veri şifreleme hatası: {e}")
             raise RuntimeError(f"Data encryption failed: {e}") from e
 
-    def decrypt_data(self, encrypted_text):
-        """Şifreli veriyi okur"""
+    def decrypt_data(self, encrypted_text, strict=False):
+        """Şifreli veriyi okur
+
+        Args:
+            encrypted_text: Şifreli metin
+            strict: True ise hata durumunda exception fırlatır,
+                   False ise (varsayılan) boş string döndürür
+        """
         if not encrypted_text:
             return ""  # Allow empty strings for optional fields
         try:
             return self.cipher.decrypt(str(encrypted_text).encode('utf-8')).decode('utf-8')
         except Exception as e:
-            # Şifre çözülemezse (eski anahtar vs.) logla ve hata fırlat
+            # Şifre çözülemezse (eski anahtar vs.) logla
             logger.error(f"Veri çözme hatası: {e}")
-            raise RuntimeError(f"Data decryption failed: {e}") from e
+
+            if strict:
+                # Test/debug modunda exception fırlat
+                raise RuntimeError(f"Data decryption failed: {e}") from e
+            else:
+                # Production'da backwards compatibility için warning ver ve boş dön
+                logger.warning(f"Decryption failed, returning empty. Key mismatch suspected.")
+                return ""  # Fallback for backwards compatibility
