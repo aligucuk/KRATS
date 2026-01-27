@@ -23,7 +23,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 class GoogleCalendarService:
     """Google Calendar integration service"""
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """Initialize Google Calendar service"""
         self.creds = None
         self.service = None

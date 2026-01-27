@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from typing import List, Optional, Dict, Any, Tuple
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, func, and_, or_, text
 from sqlalchemy.orm import sessionmaker, Session, scoped_session
@@ -24,6 +25,67 @@ from .models import (
 )
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class PatientRecord:
+    id: int
+    tc_no: str
+    full_name: str
+    phone: str
+    email: Optional[str]
+    birth_date: Optional[str]
+    gender: Optional[str]
+    address: str
+    status: str
+    source: str
+    created_at: Optional[datetime]
+
+    def _replace(self, **kwargs):
+        return replace(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class AppointmentRecord:
+    id: int
+    patient_id: int
+    doctor_id: int
+    appointment_date: datetime
+    status: str
+    notes: str
+    reminder_sent: bool
+
+    def _replace(self, **kwargs):
+        return replace(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class TransactionRecord:
+    id: int
+    type: str
+    category: str
+    amount: float
+    description: str
+    date: datetime
+
+    def _replace(self, **kwargs):
+        return replace(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class NewsRecord:
+    id: int
+    title: str
+    summary: str
+    link: str
+    source: str
+    image_url: Optional[str]
+    is_read: bool
+    is_saved: bool
+    published_date: datetime
+
+    def _replace(self, **kwargs):
+        return replace(self, **kwargs)
 
 
 class DatabaseManager:
@@ -273,6 +335,34 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to fetch users: {e}")
             return []
+
+    def get_users_except(self, user_id: int) -> List[User]:
+        """Get all active users except one."""
+        try:
+            with self.get_session() as session:
+                return session.query(User).filter(
+                    and_(User.is_active == True, User.id != user_id)
+                ).all()
+        except Exception as e:
+            logger.error(f"Failed to fetch users except {user_id}: {e}")
+            return []
+
+    def get_users_by_role(self, role: str) -> List[User]:
+        """Get users by role."""
+        try:
+            with self.get_session() as session:
+                role_value = role
+                try:
+                    role_enum = UserRole[str(role).upper()]
+                    role_value = role_enum
+                except KeyError:
+                    role_enum = None
+                if role_enum:
+                    return session.query(User).filter_by(role=role_enum, is_active=True).all()
+                return session.query(User).filter_by(is_active=True).all()
+        except Exception as e:
+            logger.error(f"Failed to fetch users by role {role}: {e}")
+            return []
     
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
@@ -435,24 +525,7 @@ class DatabaseManager:
                     Patient.status != PatientStatus.ARCHIVED
                 ).order_by(Patient.id.desc()).all()
                 
-                # Decrypt data
-                result = []
-                for p in patients:
-                    result.append({
-                        'id': p.id,
-                        'tc_no': encryption_manager.decrypt(p.tc_no),
-                        'full_name': encryption_manager.decrypt(p.full_name),
-                        'phone': encryption_manager.decrypt(p.phone),
-                        'email': p.email,
-                        'birth_date': p.birth_date,
-                        'gender': p.gender,
-                        'address': encryption_manager.decrypt(p.address),
-                        'status': p.status.value,
-                        'source': p.source,
-                        'created_at': p.created_at
-                    })
-                
-                return result
+                return [self._patient_record_from_model(p) for p in patients]
                 
         except Exception as e:
             logger.error(f"Failed to fetch patients: {e}")
@@ -466,22 +539,7 @@ class DatabaseManager:
                     status=PatientStatus.ARCHIVED
                 ).order_by(Patient.id.desc()).all()
                 
-                result = []
-                for p in patients:
-                    result.append({
-                        'id': p.id,
-                        'tc_no': encryption_manager.decrypt(p.tc_no),
-                        'full_name': encryption_manager.decrypt(p.full_name),
-                        'phone': encryption_manager.decrypt(p.phone),
-                        'email': p.email,
-                        'birth_date': p.birth_date,
-                        'gender': p.gender,
-                        'address': encryption_manager.decrypt(p.address),
-                        'status': p.status.value,
-                        'source': p.source
-                    })
-                
-                return result
+                return [self._patient_record_from_model(p) for p in patients]
                 
         except Exception as e:
             logger.error(f"Failed to fetch archived patients: {e}")
@@ -496,19 +554,7 @@ class DatabaseManager:
                 if not patient:
                     return None
                 
-                return {
-                    'id': patient.id,
-                    'tc_no': encryption_manager.decrypt(patient.tc_no),
-                    'full_name': encryption_manager.decrypt(patient.full_name),
-                    'phone': encryption_manager.decrypt(patient.phone),
-                    'email': patient.email,
-                    'birth_date': patient.birth_date,
-                    'gender': patient.gender,
-                    'address': encryption_manager.decrypt(patient.address),
-                    'status': patient.status.value,
-                    'source': patient.source,
-                    'created_at': patient.created_at
-                }
+                return self._patient_record_from_model(patient)
                 
         except Exception as e:
             logger.error(f"Failed to fetch patient: {e}")
@@ -561,8 +607,7 @@ class DatabaseManager:
                         or query_lower in tc_no
                         or query_lower in phone
                     ):
-                        session.expunge(patient)
-                        results.append(patient)
+                        results.append(self._patient_record_from_model(patient))
 
                 return results
         except Exception as e:
@@ -574,9 +619,7 @@ class DatabaseManager:
         try:
             with self.get_session() as session:
                 patients = session.query(Patient).all()
-                for patient in patients:
-                    session.expunge(patient)
-                return patients
+                return [self._patient_record_from_model(patient) for patient in patients]
         except Exception as e:
             logger.error(f"Failed to fetch patients: {e}")
             return []
@@ -607,6 +650,61 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Failed to get patient sources: {e}")
+            return []
+
+    def get_patient_count_range(self, start_date: datetime, end_date: datetime) -> int:
+        """Get patient count within date range."""
+        try:
+            with self.get_session() as session:
+                return session.query(Patient).filter(
+                    and_(
+                        Patient.created_at >= start_date,
+                        Patient.created_at <= end_date
+                    )
+                ).count()
+        except Exception as e:
+            logger.error(f"Failed to count patients in range: {e}")
+            return 0
+
+    def get_patient_sources_range(self, start_date: datetime, end_date: datetime) -> List[Tuple[str, int]]:
+        """Get patient sources within date range."""
+        try:
+            with self.get_session() as session:
+                results = session.query(
+                    Patient.source,
+                    func.count(Patient.id)
+                ).filter(
+                    and_(
+                        Patient.created_at >= start_date,
+                        Patient.created_at <= end_date
+                    )
+                ).group_by(Patient.source).all()
+                return [(source, count) for source, count in results]
+        except Exception as e:
+            logger.error(f"Failed to get patient sources in range: {e}")
+            return []
+
+    def get_new_patients_this_month(self) -> int:
+        """Get count of new patients created this month."""
+        try:
+            with self.get_session() as session:
+                month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                return session.query(Patient).filter(Patient.created_at >= month_start).count()
+        except Exception as e:
+            logger.error(f"Failed to count new patients this month: {e}")
+            return 0
+
+    def get_patient_status_distribution(self) -> List[Tuple[str, int]]:
+        """Get patient status distribution."""
+        try:
+            with self.get_session() as session:
+                results = session.query(
+                    Patient.status,
+                    func.count(Patient.id)
+                ).group_by(Patient.status).all()
+                return [(status.value if hasattr(status, "value") else status, count) for status, count in results]
+        except Exception as e:
+            logger.error(f"Failed to get patient status distribution: {e}")
             return []
     
     # ==================== APPOINTMENT MANAGEMENT ====================
@@ -735,12 +833,14 @@ class DatabaseManager:
                         Appointment.appointment_date <= end
                     )
                 ).all()
-                for appointment in appointments:
-                    session.expunge(appointment)
-                return appointments
+                return [self._appointment_record_from_model(appointment) for appointment in appointments]
         except Exception as e:
             logger.error(f"Failed to fetch appointments for date: {e}")
             return []
+
+    def get_appointments_by_date(self, date: datetime.date) -> List[AppointmentRecord]:
+        """Compatibility wrapper for appointments by date."""
+        return self.get_appointments_for_date(date)
     
     def update_appointment_status(
         self, appointment_id: int, status: str
@@ -905,11 +1005,93 @@ class DatabaseManager:
                         Transaction.transaction_date <= end_date
                     )
                 ).all()
-                for transaction in transactions:
-                    session.expunge(transaction)
-                return transactions
+                return [self._transaction_record_from_model(transaction) for transaction in transactions]
         except Exception as e:
             logger.error(f"Failed to fetch transactions for period: {e}")
+            return []
+
+    def get_all_transactions(self, limit: int = 100) -> List[TransactionRecord]:
+        """Get all transactions with limit."""
+        try:
+            with self.get_session() as session:
+                transactions = session.query(Transaction).order_by(
+                    Transaction.transaction_date.desc()
+                ).limit(limit).all()
+                return [self._transaction_record_from_model(transaction) for transaction in transactions]
+        except Exception as e:
+            logger.error(f"Failed to fetch all transactions: {e}")
+            return []
+
+    def get_transactions_by_type(self, transaction_type: str, limit: int = 100) -> List[TransactionRecord]:
+        """Get transactions filtered by type."""
+        try:
+            with self.get_session() as session:
+                try:
+                    type_enum = TransactionType[transaction_type.upper()]
+                except KeyError:
+                    type_enum = TransactionType.INCOME if transaction_type == "Gelir" else TransactionType.EXPENSE
+                transactions = session.query(Transaction).filter(
+                    Transaction.type == type_enum
+                ).order_by(Transaction.transaction_date.desc()).limit(limit).all()
+                return [self._transaction_record_from_model(transaction) for transaction in transactions]
+        except Exception as e:
+            logger.error(f"Failed to fetch transactions by type: {e}")
+            return []
+
+    def get_total_income(self, start_date: datetime, end_date: datetime) -> float:
+        """Get total income for date range."""
+        try:
+            with self.get_session() as session:
+                total = session.query(func.sum(Transaction.amount)).filter(
+                    and_(
+                        Transaction.type == TransactionType.INCOME,
+                        Transaction.transaction_date >= start_date,
+                        Transaction.transaction_date <= end_date
+                    )
+                ).scalar()
+                return float(total or 0)
+        except Exception as e:
+            logger.error(f"Failed to get total income: {e}")
+            return 0.0
+
+    def get_total_revenue(self, start_date: datetime, end_date: datetime) -> float:
+        """Compatibility wrapper for total income."""
+        return self.get_total_income(start_date, end_date)
+
+    def get_daily_financial_summary(self, start_date: datetime, end_date: datetime) -> List[Tuple[datetime, float, float]]:
+        """Get daily income/expense summary for date range."""
+        try:
+            with self.get_session() as session:
+                transactions = session.query(Transaction).filter(
+                    and_(
+                        Transaction.transaction_date >= start_date,
+                        Transaction.transaction_date <= end_date
+                    )
+                ).all()
+
+            days = {}
+            current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            last_day = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            while current <= last_day:
+                days[current.date()] = {"income": 0.0, "expense": 0.0}
+                current += timedelta(days=1)
+
+            for transaction in transactions:
+                day = transaction.transaction_date.date()
+                if day not in days:
+                    days[day] = {"income": 0.0, "expense": 0.0}
+                if transaction.type == TransactionType.INCOME:
+                    days[day]["income"] += transaction.amount
+                elif transaction.type == TransactionType.EXPENSE:
+                    days[day]["expense"] += transaction.amount
+
+            summary = []
+            for day in sorted(days.keys()):
+                summary.append((datetime.combine(day, datetime.min.time()), days[day]["income"], days[day]["expense"]))
+
+            return summary
+        except Exception as e:
+            logger.error(f"Failed to get daily financial summary: {e}")
             return []
     
     def get_transactions(
@@ -1049,6 +1231,26 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Failed to fetch inventory: {e}")
+            return []
+
+    def get_all_products(self) -> List[Product]:
+        """Get all products."""
+        try:
+            with self.get_session() as session:
+                return session.query(Product).order_by(Product.name).all()
+        except Exception as e:
+            logger.error(f"Failed to fetch all products: {e}")
+            return []
+
+    def get_low_stock_products(self) -> List[Product]:
+        """Get products below threshold."""
+        try:
+            with self.get_session() as session:
+                return session.query(Product).filter(
+                    Product.quantity <= Product.threshold
+                ).order_by(Product.name).all()
+        except Exception as e:
+            logger.error(f"Failed to fetch low stock products: {e}")
             return []
     
     def update_product_quantity(
@@ -1308,26 +1510,19 @@ class DatabaseManager:
                 articles = query.order_by(
                     MedicalNews.published_date.desc()
                 ).limit(limit).offset(offset).all()
-                
-                result = []
-                for article in articles:
-                    result.append({
-                        'id': article.id,
-                        'title': article.title,
-                        'summary': article.summary,
-                        'link': article.link,
-                        'source': article.source,
-                        'image_url': article.image_url,
-                        'is_read': article.is_read,
-                        'is_saved': article.is_saved,
-                        'published_date': article.published_date
-                    })
-                
-                return result
+                return [self._news_record_from_model(article) for article in articles]
                 
         except Exception as e:
             logger.error(f"Failed to fetch news articles: {e}")
             return []
+
+    def get_all_news(self, limit: int = 20) -> List[NewsRecord]:
+        """Compatibility wrapper for news."""
+        return self.get_news_articles(limit=limit, offset=0, unread_only=False)
+
+    def get_unread_news(self, limit: int = 20) -> List[NewsRecord]:
+        """Get unread news."""
+        return self.get_news_articles(limit=limit, offset=0, unread_only=True)
     
     def mark_news_read(self, news_id: int = None, mark_all: bool = False) -> bool:
         """Mark news as read"""
@@ -1554,6 +1749,59 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Cleanup failed: {e}")
+
+    @staticmethod
+    def _patient_record_from_model(patient: Patient) -> PatientRecord:
+        return PatientRecord(
+            id=patient.id,
+            tc_no=patient.tc_no,
+            full_name=patient.full_name,
+            phone=patient.phone,
+            email=patient.email,
+            birth_date=patient.birth_date,
+            gender=patient.gender,
+            address=patient.address,
+            status=patient.status.value if hasattr(patient.status, "value") else patient.status,
+            source=patient.source,
+            created_at=patient.created_at,
+        )
+
+    @staticmethod
+    def _appointment_record_from_model(appointment: Appointment) -> AppointmentRecord:
+        return AppointmentRecord(
+            id=appointment.id,
+            patient_id=appointment.patient_id,
+            doctor_id=appointment.doctor_id,
+            appointment_date=appointment.appointment_date,
+            status=appointment.status.value if hasattr(appointment.status, "value") else appointment.status,
+            notes=appointment.notes,
+            reminder_sent=appointment.reminder_sent,
+        )
+
+    @staticmethod
+    def _transaction_record_from_model(transaction: Transaction) -> TransactionRecord:
+        return TransactionRecord(
+            id=transaction.id,
+            type=transaction.type.value if hasattr(transaction.type, "value") else transaction.type,
+            category=transaction.category,
+            amount=transaction.amount,
+            description=transaction.description,
+            date=transaction.transaction_date,
+        )
+
+    @staticmethod
+    def _news_record_from_model(article: MedicalNews) -> NewsRecord:
+        return NewsRecord(
+            id=article.id,
+            title=article.title,
+            summary=article.summary,
+            link=article.link,
+            source=article.source,
+            image_url=article.image_url,
+            is_read=article.is_read,
+            is_saved=article.is_saved,
+            published_date=article.published_date,
+        )
 
 
 # Global instance
