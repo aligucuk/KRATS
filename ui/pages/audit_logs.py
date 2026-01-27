@@ -294,7 +294,11 @@ class AuditLogsPage:
             if not logs:
                 self.logs_table.rows.append(
                     ft.DataRow(cells=[
-                        ft.DataCell(ft.Text("Kayıt bulunamadı", italic=True, color="grey", colspan=5))
+                        ft.DataCell(ft.Text("Kayıt bulunamadı", italic=True, color="grey")),
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
                     ])
                 )
             

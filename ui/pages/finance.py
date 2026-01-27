@@ -438,9 +438,13 @@ class FinancePage:
                 self.transactions_table.rows.append(
                     ft.DataRow(cells=[
                         ft.DataCell(
-                            ft.Text("İşlem bulunamadı", italic=True, color="grey"),
-                            
-                        )
+                            ft.Text("İşlem bulunamadı", italic=True, color="grey")
+                        ),
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
+                        ft.DataCell(ft.Text("")),  # Empty cell
                     ])
                 )
             
