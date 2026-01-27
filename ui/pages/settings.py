@@ -19,7 +19,7 @@ class SettingsPage:
         self.db = db
         self.encryption = EncryptionManager()
         self.backup_service = BackupService(db)
-        self.google_service = GoogleCalendarService(db)
+        self.google_service = GoogleCalendarService()
         
         # UI Components
         self.users_table = ft.DataTable(

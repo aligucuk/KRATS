@@ -16,7 +16,7 @@ class AppointmentsPage:
     def __init__(self, page: ft.Page, db: DatabaseManager):
         self.page = page
         self.db = db
-        self.google_service = GoogleCalendarService(db)
+        self.google_service = GoogleCalendarService()
         self.notification_service = NotificationService(db)
         
         # Seçili tarih
