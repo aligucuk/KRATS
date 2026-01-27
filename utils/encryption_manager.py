@@ -41,6 +41,11 @@ class EncryptionManager:
     def decrypt(self, encrypted_text: str) -> str:
         if not encrypted_text:
             return ""  # Allow empty strings for optional fields
+        if isinstance(encrypted_text, str):
+            try:
+                encrypted_text.encode("ascii")
+            except UnicodeEncodeError:
+                return encrypted_text
         try:
             return self.cipher.decrypt(str(encrypted_text).encode()).decode()
         except InvalidToken as exc:

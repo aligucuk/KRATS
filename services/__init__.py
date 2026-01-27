@@ -7,7 +7,6 @@ from .backup_service import BackupService
 from .google_calendar_service import GoogleCalendarService
 from .enabiz_service import ENabizService
 from .sms_service import SMSService
-from .whatsapp_service import WhatsAppService
 from .news_service import MedicalNewsService
 
 __all__ = [
@@ -18,6 +17,5 @@ __all__ = [
     "GoogleCalendarService",
     "ENabizService",
     "SMSService",
-    "WhatsAppService",
     "MedicalNewsService"
 ]

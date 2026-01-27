@@ -200,7 +200,7 @@ class DatabaseManager:
     def create_user(
         self, username: str, password: str, full_name: str,
         role: str, commission_rate: int = 0, specialty: str = "Genel"
-    ) -> Tuple[bool, str]:
+    ) -> bool:
         """Create new user with license validation
         
         Args:
@@ -218,13 +218,13 @@ class DatabaseManager:
             # Validate password strength
             is_valid, error_msg = security_manager.validate_password_strength(password)
             if not is_valid:
-                return False, error_msg
+                return False
             
             with self.get_session() as session:
                 # Check if username exists
                 existing = session.query(User).filter_by(username=username).first()
                 if existing:
-                    return False, "Kullanıcı adı zaten kullanılıyor"
+                    return False
                 
                 # Check license limit (from settings or license)
                 # This would integrate with license system
@@ -235,10 +235,13 @@ class DatabaseManager:
                 hashed_password = security_manager.hash_password(password)
                 
                 # Convert role string to enum
-                try:
-                    role_enum = UserRole[role.upper()]
-                except KeyError:
-                    role_enum = UserRole.SECRETARY
+                if isinstance(role, UserRole):
+                    role_enum = role
+                else:
+                    try:
+                        role_enum = UserRole[str(role).upper()]
+                    except KeyError:
+                        role_enum = UserRole.SECRETARY
                 
                 # Create user
                 user = User(
@@ -254,13 +257,13 @@ class DatabaseManager:
                 session.commit()
                 
                 logger.info(f"User created: {username}")
-                return True, "Kullanıcı başarıyla oluşturuldu"
+                return True
                 
         except IntegrityError:
-            return False, "Kullanıcı adı zaten kullanılıyor"
+            return False
         except Exception as e:
             logger.error(f"User creation failed: {e}")
-            return False, f"Kullanıcı oluşturulamadı: {str(e)}"
+            return False
     
     def get_all_users(self) -> List[User]:
         """Get all active users"""
@@ -366,6 +369,63 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Patient creation failed: {e}")
             return False, f"Hasta kaydedilemedi: {str(e)}", None
+
+    def add_patient(
+        self, tc_no: str, first_name: str, last_name: str, phone: str,
+        email: Optional[str] = None, birth_date: str = None,
+        address: str = "", gender: str = ""
+    ) -> Optional[int]:
+        """Compatibility wrapper for adding patients using separate name fields."""
+        full_name = f"{first_name} {last_name}".strip()
+        success, _, patient_id = self.create_patient(
+            tc_no=tc_no,
+            full_name=full_name,
+            phone=phone,
+            birth_date=birth_date,
+            gender=gender,
+            address=address,
+            email=email,
+        )
+        return patient_id if success else None
+
+    def get_patient(self, patient_id: int) -> Optional[Patient]:
+        """Get patient model by ID."""
+        try:
+            with self.get_session() as session:
+                patient = session.query(Patient).filter_by(id=patient_id).first()
+                if patient:
+                    session.expunge(patient)
+                return patient
+        except Exception as e:
+            logger.error(f"Failed to fetch patient: {e}")
+            return None
+
+    def update_patient(self, patient_id: int, **updates) -> bool:
+        """Update patient details."""
+        try:
+            with self.get_session() as session:
+                patient = session.query(Patient).filter_by(id=patient_id).first()
+                if not patient:
+                    return False
+
+                if "phone" in updates:
+                    patient.phone = encryption_manager.encrypt(updates["phone"])
+                if "email" in updates:
+                    patient.email = updates["email"]
+                if "address" in updates:
+                    patient.address = encryption_manager.encrypt(updates["address"])
+                if "first_name" in updates or "last_name" in updates:
+                    first_name = updates.get("first_name", "")
+                    last_name = updates.get("last_name", "")
+                    full_name = " ".join(part for part in [first_name, last_name] if part)
+                    if full_name:
+                        patient.full_name = encryption_manager.encrypt(full_name)
+
+                session.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to update patient: {e}")
+            return False
     
     def get_active_patients(self) -> List[Dict[str, Any]]:
         """Get all active (non-archived) patients with decrypted data"""
@@ -482,29 +542,43 @@ class DatabaseManager:
             logger.error(f"Failed to restore patient: {e}")
             return False
     
-    def search_patients(self, query: str) -> List[Dict[str, Any]]:
-        """Search patients by name, TC, or phone
-        
-        Note: Searching encrypted data is limited. This performs client-side filtering.
-        For production, consider using searchable encryption or separate search index.
-        """
+    def search_patients(self, query: str) -> List[Patient]:
+        """Search patients by name, TC, or phone."""
         try:
-            # Get all active patients
-            all_patients = self.get_active_patients()
-            
-            # Filter by query (case-insensitive)
-            query = query.lower()
-            results = [
-                p for p in all_patients
-                if query in p['full_name'].lower()
-                or query in p['tc_no']
-                or query in p['phone']
-            ]
-            
-            return results
-            
+            with self.get_session() as session:
+                patients = session.query(Patient).filter(
+                    Patient.status != PatientStatus.ARCHIVED
+                ).all()
+
+                query_lower = query.lower()
+                results = []
+                for patient in patients:
+                    full_name = encryption_manager.decrypt(patient.full_name).lower()
+                    tc_no = encryption_manager.decrypt(patient.tc_no)
+                    phone = encryption_manager.decrypt(patient.phone)
+                    if (
+                        query_lower in full_name
+                        or query_lower in tc_no
+                        or query_lower in phone
+                    ):
+                        session.expunge(patient)
+                        results.append(patient)
+
+                return results
         except Exception as e:
             logger.error(f"Patient search failed: {e}")
+            return []
+
+    def get_all_patients(self) -> List[Patient]:
+        """Get all patients."""
+        try:
+            with self.get_session() as session:
+                patients = session.query(Patient).all()
+                for patient in patients:
+                    session.expunge(patient)
+                return patients
+        except Exception as e:
+            logger.error(f"Failed to fetch patients: {e}")
             return []
     
     def get_patient_count(self) -> int:
@@ -541,7 +615,7 @@ class DatabaseManager:
         self, patient_id: int, doctor_id: int,
         appointment_date: datetime, notes: str = "",
         active_user_id: Optional[int] = None
-    ) -> Tuple[bool, str, Optional[int]]:
+    ) -> Optional[int]:
         """Create new appointment
         
         Args:
@@ -552,18 +626,15 @@ class DatabaseManager:
             active_user_id: ID of user creating the appointment
             
         Returns:
-            Tuple of (success, message, appointment_id)
+            Appointment ID if created, otherwise None.
         """
         try:
             with self.get_session() as session:
-                # Encrypt notes
-                encrypted_notes = encryption_manager.encrypt(notes) if notes else ""
-                
                 appointment = Appointment(
                     patient_id=patient_id,
                     doctor_id=doctor_id,
                     appointment_date=appointment_date,
-                    notes=encrypted_notes,
+                    notes=notes or "",
                     active_user_id=active_user_id,
                     status=AppointmentStatus.WAITING
                 )
@@ -572,11 +643,19 @@ class DatabaseManager:
                 session.commit()
                 
                 logger.info(f"Appointment created: ID {appointment.id}")
-                return True, "Randevu oluşturuldu", appointment.id
+                return appointment.id
                 
         except Exception as e:
             logger.error(f"Appointment creation failed: {e}")
-            return False, f"Randevu oluşturulamadı: {str(e)}", None
+            return None
+
+    @staticmethod
+    def _maybe_decrypt(value: str) -> str:
+        if not value:
+            return ""
+        if isinstance(value, str) and value.startswith("gAAAA"):
+            return encryption_manager.decrypt(value)
+        return value
     
     def get_todays_appointments(self) -> List[Dict[str, Any]]:
         """Get today's appointments"""
@@ -602,7 +681,7 @@ class DatabaseManager:
                         'patient_id': patient.id,
                         'appointment_date': appt.appointment_date,
                         'status': appt.status.value,
-                        'notes': encryption_manager.decrypt(appt.notes) if appt.notes else ""
+                        'notes': self._maybe_decrypt(appt.notes)
                     })
                 
                 return result
@@ -635,13 +714,32 @@ class DatabaseManager:
                         'doctor_name': doctor.full_name,
                         'appointment_date': appt.appointment_date,
                         'status': appt.status.value,
-                        'notes': encryption_manager.decrypt(appt.notes) if appt.notes else ""
+                        'notes': self._maybe_decrypt(appt.notes)
                     })
                 
                 return result
                 
         except Exception as e:
             logger.error(f"Failed to fetch appointments: {e}")
+            return []
+
+    def get_appointments_for_date(self, date: datetime.date) -> List[Appointment]:
+        """Get appointments for a specific date."""
+        try:
+            with self.get_session() as session:
+                start = datetime.combine(date, datetime.min.time())
+                end = datetime.combine(date, datetime.max.time())
+                appointments = session.query(Appointment).filter(
+                    and_(
+                        Appointment.appointment_date >= start,
+                        Appointment.appointment_date <= end
+                    )
+                ).all()
+                for appointment in appointments:
+                    session.expunge(appointment)
+                return appointments
+        except Exception as e:
+            logger.error(f"Failed to fetch appointments for date: {e}")
             return []
     
     def update_appointment_status(
@@ -652,16 +750,19 @@ class DatabaseManager:
             with self.get_session() as session:
                 appointment = session.query(Appointment).filter_by(id=appointment_id).first()
                 if appointment:
-                    try:
-                        status_enum = AppointmentStatus[status.upper().replace("İ", "I")]
-                    except KeyError:
-                        # Try by value
-                        for s in AppointmentStatus:
-                            if s.value == status:
-                                status_enum = s
-                                break
-                        else:
-                            return False
+                    if isinstance(status, AppointmentStatus):
+                        status_enum = status
+                    else:
+                        try:
+                            status_enum = AppointmentStatus[str(status).upper().replace("İ", "I")]
+                        except KeyError:
+                            # Try by value
+                            for s in AppointmentStatus:
+                                if s.value == status:
+                                    status_enum = s
+                                    break
+                            else:
+                                return False
                     
                     appointment.status = status_enum
                     session.commit()
@@ -719,9 +820,11 @@ class DatabaseManager:
             logger.error(f"Failed to fetch pending reminders: {e}")
             return []
     
-    def mark_reminder_sent(self, appointment_id: int) -> bool:
+    def mark_reminder_sent(self, appointment_id: int = None, reminder_id: int = None) -> bool:
         """Mark reminder as sent"""
         try:
+            if appointment_id is None:
+                appointment_id = reminder_id
             with self.get_session() as session:
                 appointment = session.query(Appointment).filter_by(id=appointment_id).first()
                 if appointment:
@@ -765,6 +868,49 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Transaction creation failed: {e}")
             return False, "İşlem kaydedilemedi"
+
+    def add_transaction(
+        self, patient_id: int, amount: float, transaction_type: TransactionType,
+        description: str, payment_method: str = "Genel"
+    ) -> Optional[int]:
+        """Compatibility wrapper for tests to add transactions."""
+        try:
+            type_enum = transaction_type if isinstance(transaction_type, TransactionType) else TransactionType[str(transaction_type).upper()]
+        except KeyError:
+            type_enum = TransactionType.INCOME
+
+        try:
+            with self.get_session() as session:
+                transaction = Transaction(
+                    type=type_enum,
+                    category=payment_method or "Genel",
+                    amount=amount,
+                    description=description,
+                    transaction_date=datetime.now()
+                )
+                session.add(transaction)
+                session.commit()
+                return transaction.id
+        except Exception as e:
+            logger.error(f"Failed to add transaction: {e}")
+            return None
+
+    def get_transactions_for_period(self, start_date: datetime, end_date: datetime) -> List[Transaction]:
+        """Get transactions between start and end dates."""
+        try:
+            with self.get_session() as session:
+                transactions = session.query(Transaction).filter(
+                    and_(
+                        Transaction.transaction_date >= start_date,
+                        Transaction.transaction_date <= end_date
+                    )
+                ).all()
+                for transaction in transactions:
+                    session.expunge(transaction)
+                return transactions
+        except Exception as e:
+            logger.error(f"Failed to fetch transactions for period: {e}")
+            return []
     
     def get_transactions(
         self, start_date: datetime = None, end_date: datetime = None,
@@ -1055,11 +1201,16 @@ class DatabaseManager:
     # ==================== AUDIT LOGGING ====================
     
     def add_audit_log(
-        self, user_id: int, action_type: str,
-        description: str, ip_address: str = None
+        self, user_id: int, action_type: str = None,
+        description: str = None, ip_address: str = None,
+        action: str = None, details: str = None
     ) -> bool:
         """Add audit log entry"""
         try:
+            if action_type is None:
+                action_type = action
+            if description is None:
+                description = details
             with self.get_session() as session:
                 log = AuditLog(
                     user_id=user_id,
