@@ -268,7 +268,8 @@ class PatientListPage:
                         self._patient_card(patient)
                     )
             
-            self.patient_grid.update()
+            if self.patient_grid.page:
+                self.patient_grid.update()
             
         except Exception as e:
             app_logger.error(f"Render patients error: {e}")

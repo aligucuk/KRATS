@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 class AIService:
     """Multi-provider AI service (Google Gemini, OpenAI, Anthropic)"""
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """Initialize AI service with configured providers"""
         self.providers = {}
         

@@ -5,7 +5,7 @@ from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, 
     Boolean, ForeignKey, Table, Enum
 )
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, synonym
 from sqlalchemy.sql import func
 import enum
 
@@ -95,6 +95,23 @@ class Patient(Base):
     def __repr__(self):
         return f"<Patient(id={self.id}, status={self.status.value})>"
 
+    @property
+    def first_name(self) -> str:
+        from utils.encryption_manager import encryption_manager
+
+        decrypted = encryption_manager.decrypt(self.full_name) if self.full_name else ""
+        return decrypted.split(" ", 1)[0] if decrypted else ""
+
+    @property
+    def last_name(self) -> str:
+        from utils.encryption_manager import encryption_manager
+
+        decrypted = encryption_manager.decrypt(self.full_name) if self.full_name else ""
+        parts = decrypted.split()
+        if len(parts) <= 1:
+            return ""
+        return " ".join(parts[1:])
+
 
 class Appointment(Base):
     """Appointment scheduling"""
@@ -155,6 +172,8 @@ class Transaction(Base):
     transaction_date = Column(DateTime, nullable=False, index=True)
     
     created_at = Column(DateTime, server_default=func.now())
+
+    transaction_type = synonym("type")
     
     def __repr__(self):
         return f"<Transaction(id={self.id}, type={self.type.value}, amount={self.amount})>"
@@ -267,6 +286,10 @@ class AuditLog(Base):
     user_agent = Column(String(255))
     
     created_at = Column(DateTime, server_default=func.now(), index=True)
+
+    action = synonym("action_type")
+    details = synonym("description")
+    timestamp = synonym("created_at")
     
     # Relationships
     user = relationship("User", back_populates="audit_logs")

@@ -102,11 +102,11 @@ class NotificationService:
             for reminder in pending:
                 try:
                     # Parse appointment data
-                    appt_id = reminder['id']
-                    patient_name = reminder['patient_name']
-                    phone = reminder['phone']
-                    email = reminder['email']
-                    appt_date = reminder['appointment_date']
+                    appt_id = self._get_reminder_value(reminder, 'id')
+                    patient_name = self._get_reminder_value(reminder, 'patient_name')
+                    phone = self._get_reminder_value(reminder, 'phone')
+                    email = self._get_reminder_value(reminder, 'email')
+                    appt_date = self._get_reminder_value(reminder, 'appointment_date')
                     
                     # Format date/time
                     if isinstance(appt_date, str):
@@ -133,13 +133,13 @@ class NotificationService:
                     
                     # Send SMS
                     if settings.SMS_ENABLED and phone:
-                        if self.send_sms(phone, sms_message):
+                        if self._send_sms_reminder(phone, sms_message):
                             sent_any = True
                             logger.info(f"SMS sent to {phone}")
                     
                     # Send Email
                     if settings.EMAIL_ENABLED and email and '@' in email:
-                        if self.send_email(
+                        if self._send_email_reminder(
                             email,
                             "Randevu Hatırlatması",
                             email_body
@@ -159,6 +159,18 @@ class NotificationService:
             
         except Exception as e:
             logger.error(f"Reminder check failed: {e}")
+
+    @staticmethod
+    def _get_reminder_value(reminder, key: str):
+        if isinstance(reminder, dict):
+            return reminder.get(key)
+        return getattr(reminder, key, None)
+
+    def _send_sms_reminder(self, phone: str, message: str) -> bool:
+        return self.send_sms(phone, message)
+
+    def _send_email_reminder(self, email: str, subject: str, body: str) -> bool:
+        return self.send_email(email, subject, body)
     
     def send_sms(self, phone: str, message: str) -> bool:
         """Send SMS notification

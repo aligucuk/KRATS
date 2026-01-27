@@ -231,7 +231,7 @@ class AIAssistantPage:
                     bgcolor=bubble_color,
                     padding=15,
                     border_radius=15,
-                    max_width=600
+                    width=600
                 ),
                 ft.CircleAvatar(
                     content=ft.Icon(icon, size=20, color="white"),

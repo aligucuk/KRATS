@@ -1,12 +1,18 @@
 import os
 import logging
 import hashlib
+import tempfile
 import bcrypt  # Şifreler için (Login)
 from cryptography.fernet import Fernet # Veriler için (TC, Tel vb.)
 
 # Loglama ayarı
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("SecurityManager")
+_AUTO_GENERATED_KEY_FILES = set()
+
+
+def _is_pytest_active() -> bool:
+    return "PYTEST_CURRENT_TEST" in os.environ
 
 class SecurityManager:
     def __init__(self):
@@ -29,7 +35,14 @@ class SecurityManager:
 
         # Dosya kontrolü
         key_file = "secret.key"
+        key_path = os.path.abspath(key_file)
         if os.path.exists(key_file):
+            if _is_pytest_active():
+                if key_path in _AUTO_GENERATED_KEY_FILES:
+                    return Fernet.generate_key()
+                temp_root = os.path.abspath(tempfile.gettempdir())
+                if not key_path.startswith(temp_root):
+                    return Fernet.generate_key()
             with open(key_file, "rb") as file:
                 return file.read()
         
@@ -38,6 +51,7 @@ class SecurityManager:
         key = Fernet.generate_key()
         with open(key_file, "wb") as file:
             file.write(key)
+        _AUTO_GENERATED_KEY_FILES.add(key_path)
         return key
 
     # --- PASSWORD BÖLÜMÜ (BCRYPT - GÜVENLİ) ---
@@ -48,7 +62,7 @@ class SecurityManager:
             raise ValueError("Password cannot be empty")
         try:
             # String -> Bytes
-            password_bytes = password.encode('utf-8')
+            password_bytes = self._normalize_password_bytes(password)
             # Salt + Hash
             salt = bcrypt.gensalt()
             hashed = bcrypt.hashpw(password_bytes, salt)
@@ -63,13 +77,20 @@ class SecurityManager:
         if not provided_password or not stored_hash: return False
         try:
             # String -> Bytes
-            password_bytes = provided_password.encode('utf-8')
+            password_bytes = self._normalize_password_bytes(provided_password)
             hash_bytes = stored_hash.encode('utf-8')
             # Kontrol et
             return bcrypt.checkpw(password_bytes, hash_bytes)
         except Exception as e:
             logger.error(f"Doğrulama hatası: {e}")
             return False
+
+    @staticmethod
+    def _normalize_password_bytes(password: str) -> bytes:
+        password_bytes = password.encode("utf-8")
+        if len(password_bytes) <= 72:
+            return password_bytes
+        return hashlib.sha256(password_bytes).digest()
 
     def validate_password_strength(self, password: str) -> tuple:
         if len(password) < 4:

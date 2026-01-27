@@ -16,6 +16,7 @@ anthropic>=0.7.0
 # Communication Services
 twilio>=8.0.0
 selenium>=4.0.0
+webdriver-manager>=4.0.0
 
 # Document Generation
 reportlab>=4.0.0

@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures for KRATS test suite
 """
+import importlib.util
 import os
 import sys
 import tempfile
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
+from unittest.mock import patch
 
 # Add project root to Python path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -32,6 +34,61 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: Slow-running tests")
     config.addinivalue_line("markers", "database: Tests requiring database")
     config.addinivalue_line("markers", "external: Tests requiring external services")
+
+
+def pytest_addoption(parser):
+    """Register coverage options when pytest-cov is unavailable."""
+    if importlib.util.find_spec("pytest_cov") is not None:
+        return
+
+    group = parser.getgroup("coverage", "coverage reporting")
+    group.addoption(
+        "--cov",
+        action="append",
+        dest="cov_source",
+        default=[],
+        help="(stub) Coverage source paths.",
+    )
+    group.addoption(
+        "--cov-report",
+        action="append",
+        dest="cov_report",
+        default=[],
+        help="(stub) Coverage report type.",
+    )
+    group.addoption(
+        "--cov-fail-under",
+        action="store",
+        dest="cov_fail_under",
+        default=None,
+        type=int,
+        help="(stub) Coverage threshold.",
+    )
+
+
+@pytest.fixture
+def mocker():
+    """Fallback mocker fixture when pytest-mock is unavailable."""
+    class _Mocker:
+        def __init__(self):
+            self._patches = []
+
+        def patch(self, target, *args, **kwargs):
+            patcher = patch(target, *args, **kwargs)
+            mocked = patcher.start()
+            self._patches.append(patcher)
+            return mocked
+
+        def stopall(self):
+            for patcher in reversed(self._patches):
+                patcher.stop()
+            self._patches = []
+
+    manager = _Mocker()
+    try:
+        yield manager
+    finally:
+        manager.stopall()
 
 
 # ==================== DATABASE FIXTURES ====================

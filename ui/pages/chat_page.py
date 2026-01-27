@@ -383,7 +383,7 @@ class ChatPage:
                     blur_radius=2,
                     color=ft.Colors.with_opacity(0.1, "black")
                 ),
-                max_width=500
+                width=500
             )
         ], alignment=ft.MainAxisAlignment.END if is_me else ft.MainAxisAlignment.START)
     
