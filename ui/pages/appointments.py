@@ -236,6 +236,8 @@ class AppointmentsPage:
     def load_appointments(self):
         """Randevuları yükle"""
         try:
+            if not self.appointments_list.page:
+                return
             self.appointments_list.controls.clear()
             
             # Seçili tarihteki randevuları çek
@@ -265,14 +267,16 @@ class AppointmentsPage:
                         self._appointment_card(appt)
                     )
             
-            self.appointments_list.update()
+            if self.appointments_list.page:
+                self.appointments_list.update()
             
         except Exception as e:
             app_logger.error(f"Load appointments error: {e}")
-            self.page.open(ft.SnackBar(
-                ft.Text(f"Randevu yükleme hatası: {e}"),
-                bgcolor="red"
-            ))
+            if self.page:
+                self.page.open(ft.SnackBar(
+                    ft.Text(f"Randevu yükleme hatası: {e}"),
+                    bgcolor="red"
+                ))
     
     def _appointment_card(self, appt):
         """Randevu kartı"""
