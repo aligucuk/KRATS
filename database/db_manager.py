@@ -88,6 +88,16 @@ class NewsRecord:
         return replace(self, **kwargs)
 
 
+@dataclass(frozen=True)
+class NotificationRecord:
+    title: str
+    message: str
+    created_at: datetime
+
+    def _replace(self, **kwargs):
+        return replace(self, **kwargs)
+
+
 class DatabaseManager:
     """Production-ready database manager with connection pooling and security"""
     
@@ -129,7 +139,7 @@ class DatabaseManager:
                 )
             
             # Create session factory
-            session_factory = sessionmaker(bind=self.engine)
+            session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
             self.Session = scoped_session(session_factory)
             
             # Create tables
@@ -1251,6 +1261,32 @@ class DatabaseManager:
                 ).order_by(Product.name).all()
         except Exception as e:
             logger.error(f"Failed to fetch low stock products: {e}")
+            return []
+
+    def get_pending_approvals(self) -> List[Any]:
+        """Return pending approvals for dashboard notifications."""
+        return []
+
+    def get_unread_notifications(self, user_id: Optional[int]) -> List[NotificationRecord]:
+        """Get unread system notifications for a user."""
+        if not user_id:
+            return []
+        try:
+            with self.get_session() as session:
+                messages = session.query(Message).filter_by(
+                    receiver_id=user_id,
+                    is_read=False
+                ).order_by(Message.created_at.desc()).all()
+                return [
+                    NotificationRecord(
+                        title="Yeni mesaj",
+                        message=message.message,
+                        created_at=message.created_at or datetime.now()
+                    )
+                    for message in messages
+                ]
+        except Exception as e:
+            logger.error(f"Failed to fetch unread notifications: {e}")
             return []
     
     def update_product_quantity(

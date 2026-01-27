@@ -344,7 +344,8 @@ class DoctorHomePage:
                         )
                     )
             
-            self.timeline_column.update()
+            if self.timeline_column.page:
+                self.timeline_column.update()
             
         except Exception as e:
             app_logger.error(f"Timeline loading error: {e}")
@@ -505,7 +506,8 @@ class DoctorHomePage:
                         )
                     )
             
-            self.notifications_list.update()
+            if self.notifications_list.page:
+                self.notifications_list.update()
             
         except Exception as e:
             app_logger.error(f"Notifications loading error: {e}")
