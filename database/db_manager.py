@@ -643,7 +643,33 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to fetch appointments: {e}")
             return []
-    
+
+    def get_appointments_by_date(self, date) -> List[Dict[str, Any]]:
+        """Get appointments for a specific date
+
+        Args:
+            date: Date to get appointments for (datetime.date or datetime)
+
+        Returns:
+            List of appointment dictionaries
+        """
+        try:
+            # Convert date to datetime with start and end of day
+            if isinstance(date, datetime):
+                start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                # date is datetime.date
+                start = datetime.combine(date, datetime.min.time())
+
+            end = start + timedelta(days=1)
+
+            # Use existing date_range method
+            return self.get_appointments_by_date_range(start, end)
+
+        except Exception as e:
+            logger.error(f"Failed to fetch appointments by date: {e}")
+            return []
+
     def update_appointment_status(
         self, appointment_id: int, status: str
     ) -> bool:
