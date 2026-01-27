@@ -7,7 +7,7 @@ import flet as ft
 from datetime import datetime
 from database.db_manager import DatabaseManager
 from database.models import Patient
-from utils.logger import app_logget
+from utils.logger import app_logger
 from utils.encryption_manager import EncryptionManager
 import re
 
