@@ -176,30 +176,15 @@ class PatientListPage:
     def load_patients(self):
         """Hastaları yükle"""
         try:
-            # Veritabanından çek
+            # Veritabanından çek (already decrypted by db_manager)
             if self.current_filter == "active":
                 self.all_patients = self.db.get_active_patients()
             else:
                 self.all_patients = self.db.get_archived_patients()
-            
-            # Decrypt
-            decrypted_patients = []
-            for patient in self.all_patients:
-                try:
-                    decrypted_patient = patient._replace(
-                        full_name=self.encryption.decrypt(patient.full_name),
-                        tc_no=self.encryption.decrypt(patient.tc_no) if patient.tc_no else "",
-                        phone=self.encryption.decrypt(patient.phone) if patient.phone else "",
-                        address=self.encryption.decrypt(patient.address) if patient.address else ""
-                    )
-                    decrypted_patients.append(decrypted_patient)
-                except Exception as e:
-                    app_logger.error(f"Decryption error for patient {patient.id}: {e}")
-                    decrypted_patients.append(patient)
-            
-            self.all_patients = decrypted_patients
+
+            # No need to decrypt - get_active_patients() already returns decrypted dict data
             self.apply_filters()
-            
+
         except Exception as e:
             app_logger.error(f"Load patients error: {e}")
             self.page.open(ft.SnackBar(
@@ -217,23 +202,23 @@ class PatientListPage:
                 term = self.search_term.lower()
                 self.filtered_patients = [
                     p for p in self.filtered_patients
-                    if term in p.full_name.lower() or
-                       term in (p.tc_no or "").lower() or
-                       term in (p.phone or "").lower()
+                    if term in (p.get('full_name', '') or '').lower() or
+                       term in (p.get('tc_no', '') or '').lower() or
+                       term in (p.get('phone', '') or '').lower()
                 ]
-            
+
             # Kaynak filtresi
             if self.selected_source != "all":
                 self.filtered_patients = [
                     p for p in self.filtered_patients
-                    if p.source == self.selected_source
+                    if p.get('source') == self.selected_source
                 ]
-            
+
             # Cinsiyet filtresi
             if self.selected_gender != "all":
                 self.filtered_patients = [
                     p for p in self.filtered_patients
-                    if p.gender == self.selected_gender
+                    if p.get('gender') == self.selected_gender
                 ]
             
             self.render_patients()
@@ -275,20 +260,22 @@ class PatientListPage:
     
     def _patient_card(self, patient):
         """Hasta kartı oluştur"""
-        # Avatar (İsmin ilk harfi)
-        initial = patient.full_name[0].upper() if patient.full_name else "?"
-        
+        # Patient is now a dict, use dict access
+        full_name = patient.get('full_name', '')
+        initial = full_name[0].upper() if full_name else "?"
+
         # Yaş hesapla
         age = ""
-        if patient.birth_date:
+        birth_date = patient.get('birth_date')
+        if birth_date:
             try:
                 from datetime import datetime
-                birth = datetime.strptime(patient.birth_date, "%Y-%m-%d")
+                birth = datetime.strptime(str(birth_date), "%Y-%m-%d")
                 age_years = (datetime.now() - birth).days // 365
                 age = f"{age_years} yaş"
             except:
                 pass
-        
+
         # Durum rengi
         status_colors = {
             "Yeni": "blue",
@@ -296,8 +283,9 @@ class PatientListPage:
             "Beklemede": "orange",
             "Arşiv": "grey"
         }
-        status_color = status_colors.get(patient.status, "grey")
-        
+        status = patient.get('status', 'Aktif')
+        status_color = status_colors.get(status, "grey")
+
         return ft.Card(
             content=ft.Container(
                 content=ft.Column([
@@ -310,7 +298,7 @@ class PatientListPage:
                         ),
                         ft.Container(expand=True),
                         ft.Container(
-                            content=ft.Text(patient.status, size=10, color="white"),
+                            content=ft.Text(status, size=10, color="white"),
                             bgcolor=status_color,
                             padding=5,
                             border_radius=5
@@ -319,10 +307,10 @@ class PatientListPage:
                     ft.Divider(),
                     # Bilgiler
                     ft.Column([
-                        ft.Text(patient.full_name, size=16, weight="bold"),
+                        ft.Text(full_name, size=16, weight="bold"),
                         ft.Row([
                             ft.Icon(ft.Icons.PHONE, size=14, color="grey"),
-                            ft.Text(patient.phone or "-", size=12, color="grey")
+                            ft.Text(patient.get('phone') or "-", size=12, color="grey")
                         ], spacing=5),
                         ft.Row([
                             ft.Icon(ft.Icons.CAKE, size=14, color="grey"),
@@ -330,7 +318,7 @@ class PatientListPage:
                         ], spacing=5),
                         ft.Row([
                             ft.Icon(ft.Icons.SOURCE, size=14, color="grey"),
-                            ft.Text(patient.source or "-", size=12, color="grey")
+                            ft.Text(patient.get('source') or "-", size=12, color="grey")
                         ], spacing=5)
                     ], spacing=5),
                     ft.Container(expand=True),
@@ -339,13 +327,13 @@ class PatientListPage:
                         ft.TextButton(
                             "Detay",
                             icon=ft.Icons.VISIBILITY,
-                            on_click=lambda _, pid=patient.id: self.page.go(f"/patient_detail/{pid}")
+                            on_click=lambda _, pid=patient.get('id'): self.page.go(f"/patient_detail/{pid}")
                         ),
                         ft.Container(expand=True),
                         ft.IconButton(
                             ft.Icons.ARCHIVE if self.current_filter == "active" else ft.Icons.UNARCHIVE,
                             tooltip="Arşivle" if self.current_filter == "active" else "Geri Al",
-                            on_click=lambda _, pid=patient.id: self.toggle_archive(pid)
+                            on_click=lambda _, pid=patient.get('id'): self.toggle_archive(pid)
                         )
                     ])
                 ], spacing=10),
@@ -358,14 +346,15 @@ class PatientListPage:
         """İstatistikleri yükle"""
         try:
             total = len(self.all_patients)
-            new_count = len([p for p in self.all_patients if p.status == "Yeni"])
-            active_count = len([p for p in self.all_patients if p.status == "Aktif"])
-            
+            new_count = len([p for p in self.all_patients if p.get('status') == "Yeni"])
+            active_count = len([p for p in self.all_patients if p.get('status') == "Aktif"])
+
             # Kaynak dağılımı
             sources = {}
             for p in self.all_patients:
-                sources[p.source] = sources.get(p.source, 0) + 1
-            
+                source = p.get('source', 'Bilinmiyor')
+                sources[source] = sources.get(source, 0) + 1
+
             top_source = max(sources.items(), key=lambda x: x[1]) if sources else ("", 0)
             
             self.stats_row.controls = [
