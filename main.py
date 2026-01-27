@@ -308,7 +308,12 @@ def init_app(page: ft.Page):
             # Layout ile sarmalama (TV ekranı hariç)
             if route != "/tv_display":
                 layout = AppLayout(page, db)
-                page.views.append(layout.get_view(route, view))
+                # Extract content from view (views return ft.View, but AppLayout needs controls)
+                if isinstance(view, ft.View) and view.controls:
+                    content = view.controls[0]  # Get first control from view
+                else:
+                    content = view  # Fallback if already a control
+                page.views.append(layout.get_view(route, content))
             else:
                 page.views.append(view)
             
