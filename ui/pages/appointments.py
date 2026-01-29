@@ -237,10 +237,10 @@ class AppointmentsPage:
         """Randevuları yükle"""
         try:
             self.appointments_list.controls.clear()
-            
+
             # Seçili tarihteki randevuları çek
             appointments = self.db.get_appointments_by_date(self.selected_date)
-            
+
             if not appointments:
                 self.appointments_list.controls.append(
                     ft.Container(
@@ -259,20 +259,23 @@ class AppointmentsPage:
             else:
                 # Randevuları saate göre sırala
                 appointments.sort(key=lambda x: x.appointment_date)
-                
+
                 for appt in appointments:
                     self.appointments_list.controls.append(
                         self._appointment_card(appt)
                     )
-            
-            self.appointments_list.update()
-            
+
+            # Sadece sayfa bağlıysa güncelle (ilk yüklemede sayfa henüz bağlı değil)
+            if self.appointments_list.page:
+                self.appointments_list.update()
+
         except Exception as e:
             app_logger.error(f"Load appointments error: {e}")
-            self.page.open(ft.SnackBar(
-                ft.Text(f"Randevu yükleme hatası: {e}"),
-                bgcolor="red"
-            ))
+            if self.page:
+                self.page.open(ft.SnackBar(
+                    ft.Text(f"Randevu yükleme hatası: {e}"),
+                    bgcolor="red"
+                ))
     
     def _appointment_card(self, appt):
         """Randevu kartı"""
@@ -376,19 +379,23 @@ class AppointmentsPage:
         """Günlük istatistikleri yükle"""
         try:
             appointments = self.db.get_appointments_by_date(self.selected_date)
-            
+
             total = len(appointments)
             waiting = len([a for a in appointments if a.status == "Bekliyor"])
             completed = len([a for a in appointments if a.status == "Tamamlandı"])
             cancelled = len([a for a in appointments if a.status == "İptal"])
-            
+
             self.stats_row.controls = [
                 self._stat_badge("Toplam", str(total), "blue"),
                 self._stat_badge("Bekliyor", str(waiting), "orange"),
                 self._stat_badge("Tamamlandı", str(completed), "green"),
                 self._stat_badge("İptal", str(cancelled), "red")
             ]
-            
+
+            # Sadece sayfa bağlıysa güncelle
+            if self.stats_row.page:
+                self.stats_row.update()
+
         except Exception as e:
             app_logger.error(f"Load stats error: {e}")
     
