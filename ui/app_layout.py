@@ -38,22 +38,30 @@ class AppLayout:
             except Exception as e:
                 logger.error(f"Menu refresh failed: {e}")
     
-    def get_view(self, route: str, content_control: ft.Control) -> ft.View:
+    def get_view(self, route: str, content_control) -> ft.View:
         """Get main view with sidebar and content
-        
+
         Args:
             route: Current route
-            content_control: Content area control
-            
+            content_control: Content area control or ft.View
+
         Returns:
             Complete view with sidebar
         """
         self.current_route = route
         user_name = self.page.session.get("user_name") or "Kullanıcı"
-        
+
+        # If content_control is a View, extract its controls
+        if isinstance(content_control, ft.View):
+            # View içindeki ilk kontrolü al (genellikle ana Container)
+            if content_control.controls:
+                content_control = content_control.controls[0]
+            else:
+                content_control = ft.Container()
+
         # Build menu items
         self.build_menu_items()
-        
+
         # Sidebar
         sidebar = ft.Container(
             content=ft.Column([
