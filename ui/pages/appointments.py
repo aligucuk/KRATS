@@ -200,36 +200,39 @@ class AppointmentsPage:
         """Hasta listesini yükle"""
         try:
             patients = self.db.get_active_patients()
-            
+
+            # get_active_patients() dictionary listesi döndürür
             self.dd_patient.options = [
                 ft.dropdown.Option(
-                    key=str(p.id),
-                    text=p.full_name
+                    key=str(p['id']),
+                    text=p['full_name']
                 ) for p in patients
             ]
-            
+
         except Exception as e:
             app_logger.error(f"Load patients error: {e}")
-    
+
     def load_doctors(self):
         """Doktor listesini yükle"""
         try:
-            doctors = self.db.get_users_by_role("doktor")
-            
+            # get_all_users() User nesneleri döndürür, doktorları filtrele
+            all_users = self.db.get_all_users()
+            doctors = [u for u in all_users if u.role == "doktor"]
+
             self.dd_doctor.options = [
                 ft.dropdown.Option(
                     key=str(d.id),
                     text=d.full_name
                 ) for d in doctors
             ]
-            
+
             # Oturum açan kullanıcı doktorsa otomatik seç
             current_user_id = self.page.session.get("user_id")
             current_role = self.page.session.get("role")
-            
+
             if current_role == "doktor":
                 self.dd_doctor.value = str(current_user_id)
-            
+
         except Exception as e:
             app_logger.error(f"Load doctors error: {e}")
     
